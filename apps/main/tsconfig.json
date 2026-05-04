@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/inngest/*": ["../../inngest/*"],
+      "@/trpc/*": ["../../trpc/*"],
+      "@quazom-ai/ui/globals.css": ["../../packages/ui/src/styles/globals.css"],
+      "@quazom-ai/ui/components/ui/*": [
+        "../../packages/ui/src/components/ui/*"
+      ],
+      "@quazom-ai/ui/lib/utils": ["../../packages/ui/src/lib/utils.ts"],
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
