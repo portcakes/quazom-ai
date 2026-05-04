@@ -1,0 +1,13 @@
+procs:
+  main:
+    cmd: ["npm", "--workspace", "apps/main", "run", "dev"]
+    env:
+      PORT: "3001"
+  web:
+    cmd: ["npm", "--workspace", "apps/web", "run", "dev"]
+    env:
+      PORT: "3000"
+  docs:
+    cmd: ["npm", "--workspace", "apps/docs", "run", "dev"]
+    env:
+      PORT: "3002"
