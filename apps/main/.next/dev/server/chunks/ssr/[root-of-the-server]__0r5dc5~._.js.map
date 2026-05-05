@@ -1,8 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "debugId": "6d59ddc7-f42b-e39a-61fa-290cfe94018a",
-  "sections": [
-    {"offset": {"line": 14, "column": 0}, "map": {"version":3,"sources":["file:///Users/carla/Desktop/Codex/quazom-ai/apps/main/app/favicon.ico.mjs%20%28structured%20image%20object%29"],"sourcesContent":["import src from \"IMAGE\";\nexport default { src, width: 256, height: 256 }\n"],"names":["src","width","height"],"mappings":";;;;AAAA;;uCACe;IAAEA,KAAAA,mJAAG;IAAEC,OAAO;IAAKC,QAAQ;AAAI"}},
-    {"offset": {"line": 29, "column": 0}, "map": {"version":3,"sources":["file:///Users/carla/Desktop/Codex/quazom-ai/apps/main/app/page.tsx"],"sourcesContent":["export default function Home() {\n  return (\n    <div className=\"flex flex-col items-center justify-center h-screen\">\n      <h1 className=\"text-3xl font-bold\">Hello World</h1>\n    </div>\n  );\n}\n"],"names":["Home","className"],"mappings":";;;;;;AAAe,SAASA;IACtB,qBACE,8OAAC;QAAIC,WAAU;kBACb,cAAA,8OAAC;YAAGA,WAAU;sBAAqB;;;;;;;;;;;AAGzC"}}]
-}

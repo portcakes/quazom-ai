@@ -1,5 +1,0 @@
-;!function(){try { var e="undefined"!=typeof globalThis?globalThis:"undefined"!=typeof global?global:"undefined"!=typeof window?window:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&((e._debugIds|| (e._debugIds={}))[n]="bba387cd-8c2b-5c04-6457-41b773492cad")}catch(e){}}();
-module.exports=[93695,(a,b,c)=>{b.exports=a.x("next/dist/shared/lib/no-fallback-error.external.js",()=>require("next/dist/shared/lib/no-fallback-error.external.js"))},9293,a=>{a.v("/_next/static/media/favicon.0x3dzn~oxb6tn.ico"+(globalThis.NEXT_CLIENT_ASSET_SUFFIX||""))},6033,a=>{"use strict";let b={src:a.i(9293).default,width:256,height:256};a.s(["default",0,b])},26522,a=>{"use strict";var b=a.i(7997);a.s(["default",0,function(){return(0,b.jsx)("div",{className:"flex flex-col items-center justify-center h-screen",children:(0,b.jsx)("h1",{className:"text-3xl font-bold",children:"Hello World"})})}])},49491,a=>{a.n(a.i(26522))}];
-
-//# debugId=bba387cd-8c2b-5c04-6457-41b773492cad
-//# sourceMappingURL=%5Broot-of-the-server%5D__0r5dc5~._.js.map

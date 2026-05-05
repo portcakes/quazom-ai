@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "debugId": "37fa0e6d-d787-955a-1f77-af11fa38ac68",
-  "sections": [
-    {"offset": {"line": 5, "column": 0}, "map": {"version":3,"sources":["file:///Users/carla/Desktop/Codex/quazom-ai/apps/main/app/global-error.tsx"],"sourcesContent":["\"use client\";\n\nimport * as Sentry from \"@sentry/nextjs\";\nimport NextError from \"next/error\";\nimport { useEffect } from \"react\";\n\nexport default function GlobalError({\n  error,\n}: {\n  error: Error & { digest?: string };\n}) {\n  useEffect(() => {\n    Sentry.captureException(error);\n  }, [error]);\n\n  return (\n    <html lang=\"en\">\n      <body>\n        {/* `NextError` is the default Next.js error page component. Its type\n        definition requires a `statusCode` prop. However, since the App Router\n        does not expose status codes for errors, we simply pass 0 to render a\n        generic error message. */}\n        <NextError statusCode={0} />\n      </body>\n    </html>\n  );\n}\n"],"names":["GlobalError","error","lang","statusCode"],"mappings":";;;;;AAEA;AACA;AACA;;;AAJA;;;;AAMe,SAASA,YAAY,EAClCC,KAAK,EAGN;;IACC,IAAA,0KAAS;iCAAC;YACR,kLAAuB,CAACA;QAC1B;gCAAG;QAACA;KAAM;IAEV,qBACE,6LAAC;QAAKC,MAAK;kBACT,cAAA,6LAAC;sBAKC,cAAA,6LAAC,2IAAS;gBAACC,YAAY;;;;;;;;;;;;;;;;AAI/B;GApBwBH;KAAAA"}}]
-}
