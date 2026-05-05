@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "@quazom-ai/ui/globals.css";
 import { Toaster } from "@quazom-ai/ui/components/ui/sonner";
 import { TooltipProvider } from "@quazom-ai/ui/components/ui/tooltip";
-import NavWrapper from "../components/features/nav/nav-wrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,9 +30,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <TooltipProvider>
-          <NavWrapper>{children}</NavWrapper>
-        </TooltipProvider>
+        <TooltipProvider>{children}</TooltipProvider>
         <Toaster />
       </body>
     </html>
