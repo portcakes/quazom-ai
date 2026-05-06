@@ -61,3 +61,8 @@ export type Account = Prisma.AccountModel
  * 
  */
 export type Verification = Prisma.VerificationModel
+/**
+ * Model Curriculum
+ * 
+ */
+export type Curriculum = Prisma.CurriculumModel
