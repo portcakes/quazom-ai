@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import NewCurriculumModal from "../new-curriculum-modal";
 
 type UserMenuProps = {
   firstName: string;
@@ -76,10 +77,7 @@ export function UserMenu({ firstName, fullName, avatarUrl }: UserMenuProps) {
         className="w-(--radix-dropdown-menu-trigger-width)"
       >
         <DropdownMenuItem asChild className="cursor-pointer">
-          <Link href="/courses/new">
-            <PlusIcon />
-            <span>Create Course</span>
-          </Link>
+          <NewCurriculumModal />
         </DropdownMenuItem>
         <DropdownMenuItem asChild className="cursor-pointer">
           <Link href="/schedule">

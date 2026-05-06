@@ -1,3 +1,4 @@
+import { requireAuth } from '@/lib/auth-utils';
 import { initTRPC } from '@trpc/server';
 import { cache } from 'react';
  
@@ -23,3 +24,7 @@ const t = initTRPC.create({
 export const createTRPCRouter = t.router;
 export const createCallerFactory = t.createCallerFactory;
 export const baseProcedure = t.procedure;
+export const protectedcProcedure = t.procedure.use(async ({ ctx, next }) => {
+  const session = await requireAuth();
+  return next({ ctx: { ...ctx, userId: session.user.id } });
+});

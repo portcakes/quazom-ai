@@ -10,9 +10,9 @@ export const createCurriculum = inngest.createFunction(
   { id: "process-curriculum", triggers: { event: "app/curriculum.created" } },
   async ({ event, step }) => {
       const { content } = await step.ai.wrap("gemini-generate-text", generateText, {
-        model: google("gemini-2.5-flash"),
+        model: google("gemini-2.5-flash-lite"),
         system: `You are a helpful assistant that generates a curriculum for a given topic.`,
-        prompt: `Create a personalized curriculum for the following topic: Physics
+        prompt: `Create a personalized curriculum for the following topic: ${event.data.subject} at the ${event.data.level} level. The student's goal is to ${event.data.goal}.
 
 Return ONLY valid JSON matching this schema. Do not include any other text or comments.
 
@@ -52,6 +52,6 @@ Return ONLY valid JSON matching this schema. Do not include any other text or co
   ]
 }`,
       });
-      return { rawAiResponse: content };
+      return { rawAiResponse: JSON.stringify(content), structuredDataJson: content };
   }
 );
