@@ -37,9 +37,9 @@ export default async function AppSidebar() {
       <SidebarSeparator className="mx-0" />
       <SidebarFooter className="p-0">
         <UserMenu
-          firstName={user.firstName}
-          fullName={user.fullName}
-          avatarUrl={user.avatarUrl}
+          firstName={user?.firstName ?? "No name"}
+          fullName={user?.fullName ?? "No name"}
+          avatarUrl={user?.avatarUrl ?? null}
         />
       </SidebarFooter>
     </Sidebar>

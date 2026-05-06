@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Avatar,
   AvatarFallback,
@@ -19,6 +21,8 @@ import {
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
+import { Button } from "@quazom-ai/ui/components/ui/button";
+import { authClient } from "@/lib/auth-client";
 
 type UserMenuProps = {
   firstName: string;
@@ -27,6 +31,8 @@ type UserMenuProps = {
 };
 
 export function UserMenu({ firstName, fullName, avatarUrl }: UserMenuProps) {
+  const router = useRouter();
+
   const initials =
     fullName
       .split(" ")
@@ -36,17 +42,25 @@ export function UserMenu({ firstName, fullName, avatarUrl }: UserMenuProps) {
       .join("")
       .toUpperCase() || "?";
 
-  // TODO: wire this up to the real session sign-out once auth is in place.
-  // const handleLogout = async () => {
-  //   await authClient.signOut();
-  //   router.push("/login");
-  // };
+  const handleLogout = async () => {
+    await authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          router.push("/login");
+          router.refresh();
+        },
+        onError: (error) => {
+          toast.error(error.error?.message ?? "Unable to sign out.");
+        },
+      },
+    });
+  };
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Open account menu for ${fullName}`}
-        className="flex w-full items-center gap-2 px-3 py-3 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:outline-none aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground"
+        className="flex w-full items-center gap-2 px-3 py-3 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:outline-none aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground cursor-pointer"
       >
         <Avatar size="sm">
           {avatarUrl ? <AvatarImage src={avatarUrl} alt={fullName} /> : null}
@@ -61,25 +75,31 @@ export function UserMenu({ firstName, fullName, avatarUrl }: UserMenuProps) {
         sideOffset={8}
         className="w-(--radix-dropdown-menu-trigger-width)"
       >
-        <DropdownMenuItem asChild>
+        <DropdownMenuItem asChild className="cursor-pointer">
           <Link href="/courses/new">
             <PlusIcon />
             <span>Create Course</span>
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
+        <DropdownMenuItem asChild className="cursor-pointer">
           <Link href="/schedule">
             <CalendarIcon />
             <span>View Schedule</span>
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
+        <DropdownMenuItem asChild className="cursor-pointer">
           <Link href="/settings">
             <SettingsIcon />
             <span>Settings</span>
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem variant="destructive">
+        <DropdownMenuItem className="cursor-pointer"
+          variant="destructive"
+          onSelect={(event) => {
+            event.preventDefault();
+            void handleLogout();
+          }}
+        >
           <LogOutIcon />
           <span>Logout</span>
         </DropdownMenuItem>
