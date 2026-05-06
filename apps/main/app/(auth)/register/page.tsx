@@ -66,18 +66,19 @@ export default function RegisterPage() {
       name: values.name,
       email: values.email,
       password: values.password,
-    });
-
-    setIsSubmitting(false);
-
-    if (error) {
-      toast.error(error.message ?? "Unable to create your account.");
-      return;
-    }
-
+      callbackURL: "/",
+    },
+  {onSuccess: () => {
     toast.success("Welcome to Quazom!");
     router.push("/");
     router.refresh();
+  },
+  onError: (error) => {
+    toast.error(error.error?.message ?? "Unable to create your account.");
+    setIsSubmitting(false);
+  },
+},
+);
   };
 
   return (
@@ -166,7 +167,7 @@ export default function RegisterPage() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button type="submit" className="w-full cursor-pointer" disabled={isSubmitting}>
               {isSubmitting ? <Spinner /> : "Create account"}
             </Button>
           </form>
