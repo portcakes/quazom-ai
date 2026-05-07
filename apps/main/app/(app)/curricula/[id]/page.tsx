@@ -30,6 +30,9 @@ export default async function CurriculumPage({ params }: { params: Params }) {
         estimatedDuration={curriculum.estimatedDuration}
       />
       <CurriculumTabs
+        id={curriculum.id}
+        title={curriculum.title}
+        isHidden={curriculum.isHidden}
         objectives={curriculum.objectives}
         modules={curriculum.modules}
         resources={curriculum.recommendedResources}

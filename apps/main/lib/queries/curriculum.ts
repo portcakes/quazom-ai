@@ -21,6 +21,7 @@ export type CurriculumDetail = {
   level: string;
   goal: string;
   estimatedDuration: string;
+  isHidden: boolean;
   objectives: CurriculumObjective[];
   modules: CurriculumModule[];
   recommendedResources: CurriculumResource[];
@@ -42,6 +43,7 @@ export async function getCurriculumById(
       level: true,
       goal: true,
       estimatedDuration: true,
+      isHidden: true,
       objectives: true,
       modules: true,
       recommendedResources: true,
@@ -60,6 +62,7 @@ export async function getCurriculumById(
     level: curriculum.level,
     goal: curriculum.goal,
     estimatedDuration: curriculum.estimatedDuration,
+    isHidden: curriculum.isHidden,
     objectives: z.array(curriculumObjectiveSchema).parse(curriculum.objectives),
     modules: z.array(curriculumModuleSchema).parse(curriculum.modules),
     recommendedResources: z

@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { BookIcon, Loader2Icon } from "lucide-react";
+import { BookIcon, LayoutGridIcon, Loader2Icon } from "lucide-react";
 import { useSidebar } from "@quazom-ai/ui/components/ui/sidebar";
 import { useCourseList } from "./course-list-provider";
 import NewCurriculumModal from "../new-curriculum-modal";
 
 export function CourseList() {
-  const { courses, pending } = useCourseList();
+  const { courses, pending, totalCount } = useCourseList();
   const { isMobile, setOpenMobile } = useSidebar();
 
   const handleCourseClick = () => {
@@ -16,7 +16,9 @@ export function CourseList() {
     }
   };
 
-  if (courses.length === 0 && pending.length === 0) {
+  // Empty state only when there's truly nothing — not even hidden curricula
+  // or pending generations.
+  if (courses.length === 0 && pending.length === 0 && totalCount === 0) {
     return <CoursesEmptyState />;
   }
 
@@ -54,6 +56,18 @@ export function CourseList() {
           </div>
         </li>
       ))}
+      {totalCount > 0 && (
+        <li className="mt-1">
+          <Link
+            href="/curricula"
+            onClick={handleCourseClick}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          >
+            <LayoutGridIcon className="size-4 shrink-0" />
+            <span className="truncate">See all Curricula</span>
+          </Link>
+        </li>
+      )}
     </ul>
   );
 }

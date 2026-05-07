@@ -9,14 +9,25 @@ import type {
 import { SyllabusTab } from "./syllabus-tab";
 import { ModulesTab } from "./modules-tab";
 import { ResourcesTab } from "./resources-tab";
+import { OptionsTab } from "./options-tab";
 
 type Props = {
+  id: string;
+  title: string;
+  isHidden: boolean;
   objectives: CurriculumObjective[];
   modules: CurriculumModule[];
   resources: CurriculumResource[];
 };
 
-export function CurriculumTabs({ objectives, modules, resources }: Props) {
+export function CurriculumTabs({
+  id,
+  title,
+  isHidden,
+  objectives,
+  modules,
+  resources,
+}: Props) {
   return (
     <section className="mx-auto w-full max-w-4xl px-6 py-8">
       <Tabs defaultValue="syllabus" className="w-full">
@@ -26,9 +37,10 @@ export function CurriculumTabs({ objectives, modules, resources }: Props) {
               - everywhere else: just the compact header h-12 = top-12 */}
         <div className="sticky top-24 z-10 -mx-6 border-b border-border bg-background/95 px-6 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:top-12">
           <TabsList>
-            <TabsTrigger value="syllabus">Syllabus</TabsTrigger>
-            <TabsTrigger value="modules">Modules</TabsTrigger>
-            <TabsTrigger value="resources">Resources</TabsTrigger>
+            <TabsTrigger value="syllabus" className="cursor-pointer">Syllabus</TabsTrigger>
+            <TabsTrigger value="modules" className="cursor-pointer">Modules</TabsTrigger>
+            <TabsTrigger value="resources" className="cursor-pointer">Resources</TabsTrigger>
+            <TabsTrigger value="options" className="cursor-pointer">Options</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="syllabus" className="mt-6">
@@ -39,6 +51,9 @@ export function CurriculumTabs({ objectives, modules, resources }: Props) {
         </TabsContent>
         <TabsContent value="resources" className="mt-6">
           <ResourcesTab resources={resources} />
+        </TabsContent>
+        <TabsContent value="options" className="mt-6">
+          <OptionsTab id={id} title={title} isHidden={isHidden} />
         </TabsContent>
       </Tabs>
     </section>

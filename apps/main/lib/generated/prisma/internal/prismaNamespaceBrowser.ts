@@ -146,6 +146,7 @@ export const CurriculumScalarFieldEnum = {
   recommendedResources: 'recommendedResources',
   raw_ai_response: 'raw_ai_response',
   structured_data_json: 'structured_data_json',
+  isHidden: 'isHidden',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

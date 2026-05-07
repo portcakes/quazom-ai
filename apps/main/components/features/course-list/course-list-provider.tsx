@@ -16,6 +16,11 @@ export type PendingCourse = {
 type CourseListContextValue = {
   courses: CourseSummary[];
   pending: PendingCourse[];
+  /**
+   * Total number of curricula owned by the user, including hidden ones.
+   * Used to decide whether to show the "See all Curricula" sidebar link.
+   */
+  totalCount: number;
   addPending: (entry: PendingCourse) => void;
   removePending: (tempId: string) => void;
 };
@@ -27,10 +32,16 @@ const REALTIME_TOPICS = ["curriculumReady"] as const;
 type Props = {
   userId: string;
   initialCourses: CourseSummary[];
+  initialTotalCount: number;
   children: React.ReactNode;
 };
 
-export function CourseListProvider({ userId, initialCourses, children }: Props) {
+export function CourseListProvider({
+  userId,
+  initialCourses,
+  initialTotalCount,
+  children,
+}: Props) {
   const router = useRouter();
   const trpcClient = useTRPCClient();
   const [pending, setPending] = useState<PendingCourse[]>([]);
@@ -76,8 +87,14 @@ export function CourseListProvider({ userId, initialCourses, children }: Props) 
   }, []);
 
   const value = useMemo<CourseListContextValue>(
-    () => ({ courses: initialCourses, pending, addPending, removePending }),
-    [initialCourses, pending, addPending, removePending],
+    () => ({
+      courses: initialCourses,
+      pending,
+      totalCount: initialTotalCount,
+      addPending,
+      removePending,
+    }),
+    [initialCourses, initialTotalCount, pending, addPending, removePending],
   );
 
   return <CourseListContext.Provider value={value}>{children}</CourseListContext.Provider>;

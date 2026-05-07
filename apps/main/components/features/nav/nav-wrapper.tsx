@@ -6,12 +6,16 @@ import {
 } from "@quazom-ai/ui/components/ui/sidebar";
 import { requireAuth } from "@/lib/auth-utils";
 import { getCurrentUser } from "@/lib/queries/user";
-import { getUserCourses } from "@/lib/queries/courses";
+import { getUserCourses, getUserCurriculaCount } from "@/lib/queries/courses";
 import { CourseListProvider } from "../course-list/course-list-provider";
 
 export default async function NavWrapper({ children }: { children: React.ReactNode }) {
     await requireAuth();
-    const [user, courses] = await Promise.all([getCurrentUser(), getUserCourses()]);
+    const [user, courses, totalCount] = await Promise.all([
+        getCurrentUser(),
+        getUserCourses(),
+        getUserCurriculaCount(),
+    ]);
 
     if (!user) {
         // requireAuth() above should have redirected, but bail out defensively.
@@ -19,7 +23,11 @@ export default async function NavWrapper({ children }: { children: React.ReactNo
     }
 
     return (
-        <CourseListProvider userId={user.id} initialCourses={courses}>
+        <CourseListProvider
+            userId={user.id}
+            initialCourses={courses}
+            initialTotalCount={totalCount}
+        >
             <SidebarProvider>
                 <AppSidebar user={user} />
                 <SidebarInset>

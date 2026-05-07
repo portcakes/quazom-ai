@@ -54,6 +54,25 @@ export const appRouter = createTRPCRouter({
         },
       });
     }),
+  setCurriculumHidden: protectedcProcedure
+    .input(z.object({ id: z.string(), isHidden: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      // updateMany with the userId guard — a row not owned by this user
+      // becomes a 0-row noop instead of throwing, so we don't leak existence.
+      const result = await prisma.curriculum.updateMany({
+        where: { id: input.id, userId: ctx.userId },
+        data: { isHidden: input.isHidden },
+      });
+      return { updated: result.count };
+    }),
+  deleteCurriculum: protectedcProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await prisma.curriculum.deleteMany({
+        where: { id: input.id, userId: ctx.userId },
+      });
+      return { deleted: result.count };
+    }),
   realtimeToken: protectedcProcedure.query(async ({ ctx }) => {
     // Strip the channel/topics back out before serializing across the wire:
     // they contain Zod schema instances that don't survive JSON. The client
