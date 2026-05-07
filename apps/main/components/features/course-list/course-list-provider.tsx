@@ -51,7 +51,16 @@ export function CourseListProvider({
   // Stable factory: only changes when the tRPC client identity changes,
   // which is once per provider mount.
   const tokenFactory = useCallback(async () => {
-    return await trpcClient.realtimeToken.query();
+    const token = await trpcClient.realtimeToken.query();
+    if (!token.key) {
+      throw new Error("Failed to mint Inngest realtime subscription");
+    }
+    // Minted keys are scoped to the same API host the server used (`apiBaseUrl`).
+    // Returning only `key` makes the browser default to api.inngest.com and breaks
+    // dev (localhost:8288) realtime — see TokenSubscription#getWsUrl.
+    return typeof token.apiBaseUrl === "string"
+      ? { key: token.key, apiBaseUrl: token.apiBaseUrl }
+      : token.key;
   }, [trpcClient]);
 
   const { messages } = useRealtime({

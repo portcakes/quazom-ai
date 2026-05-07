@@ -73,16 +73,31 @@ export const appRouter = createTRPCRouter({
       });
       return { deleted: result.count };
     }),
-  realtimeToken: protectedcProcedure.query(async ({ ctx }) => {
-    // Strip the channel/topics back out before serializing across the wire:
-    // they contain Zod schema instances that don't survive JSON. The client
-    // already knows the channel/topics from its own import of `userChannel`.
-    const token = await getSubscriptionToken(inngest, {
-      channel: userChannel(ctx.userId),
-      topics: ['curriculumReady'],
-    });
-    return { key: token.key, apiBaseUrl: token.apiBaseUrl };
-  }),
+  realtimeToken: protectedcProcedure
+    // Match Inngest `ClientSubscriptionToken` so callers (e.g. `useRealtime`) get
+    // a `key` that is typed as required `string`, not optional from JSON inference.
+    .output(
+      z.object({
+        key: z.string(),
+        apiBaseUrl: z.string().optional(),
+      }),
+    )
+    .query(async ({ ctx }) => {
+      // Strip the channel/topics back out before serializing across the wire:
+      // they contain Zod schema instances that don't survive JSON. The client
+      // already knows the channel/topics from its own import of `userChannel`.
+      const token = await getSubscriptionToken(inngest, {
+        channel: userChannel(ctx.userId),
+        topics: ['curriculumReady'],
+      });
+      if (!token.key) {
+        throw new Error('Failed to mint Inngest realtime subscription');
+      }
+      return {
+        key: token.key,
+        ...(typeof token.apiBaseUrl === 'string' ? { apiBaseUrl: token.apiBaseUrl } : {}),
+      };
+    }),
 });
 
 export type AppRouter = typeof appRouter;
