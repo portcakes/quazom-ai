@@ -1,3 +1,4 @@
+"use client";
 import Link from "next/link";
 import {
   Sidebar,
@@ -5,6 +6,7 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarSeparator,
+  useSidebar,
 } from "@quazom-ai/ui/components/ui/sidebar";
 import type { CurrentUser } from "@/lib/queries/user";
 import { UserMenu } from "./user-menu";
@@ -15,12 +17,20 @@ type Props = {
 };
 
 export default function AppSidebar({ user }: Props) {
+  
+  const { isMobile, setOpenMobile } = useSidebar();
+  const logoClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
   return (
     <Sidebar side="left" collapsible="offcanvas">
       <SidebarHeader className="px-4 py-4">
         <Link
           href="/"
-          className="font-heading text-2xl font-bold tracking-tight hover:text-sidebar-accent-foreground"
+          className="font-heading text-2xl font-bold tracking-tight hover:text-sidebar-accent-foreground cursor-pointer"
+          onClick={logoClick}
         >
           Quazom
         </Link>
