@@ -11,6 +11,7 @@ import { Button } from "@quazom-ai/ui/components/ui/button";
 import { getCurrentUser } from "@/lib/queries/user";
 import { getUserCourses, type CourseSummary } from "@/lib/queries/courses";
 import { UserMenu } from "./user-menu";
+import NewCurriculumModal from "../new-curriculum-modal";
 
 export default async function AppSidebar() {
   const user = await getCurrentUser();
@@ -70,9 +71,7 @@ function CoursesEmptyState() {
       <p className="text-sm text-muted-foreground">
         You don&apos;t have any courses yet. Create one to get started.
       </p>
-      <Button asChild size="sm">
-        <Link href="/courses/new">Create Course</Link>
-      </Button>
+      <NewCurriculumModal />
     </div>
   );
 }
