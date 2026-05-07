@@ -75,7 +75,7 @@ Sequence modules from foundational to advanced. Each lesson must have a concrete
     const saved = await step.run("save-curriculum", async () => {
       return prisma.curriculum.create({
         data: {
-          id: crypto.randomUUID(),
+          id: event.data.id,
           userId: event.data.userId,
           title: curriculum.title,
           subject: event.data.subject,

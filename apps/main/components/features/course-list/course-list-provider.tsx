@@ -2,11 +2,10 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
 import { useRealtime } from "inngest/react";
 import { toast } from "sonner";
 import { userChannel } from "@/inngest/channels";
-import { useTRPC } from "@/trpc/client";
+import { useTRPCClient } from "@/trpc/client";
 import type { CourseSummary } from "@/lib/queries/courses";
 
 export type PendingCourse = {
@@ -18,6 +17,7 @@ type CourseListContextValue = {
   courses: CourseSummary[];
   pending: PendingCourse[];
   addPending: (entry: PendingCourse) => void;
+  removePending: (tempId: string) => void;
 };
 
 const CourseListContext = createContext<CourseListContextValue | null>(null);
@@ -32,31 +32,21 @@ type Props = {
 
 export function CourseListProvider({ userId, initialCourses, children }: Props) {
   const router = useRouter();
-  const trpc = useTRPC();
+  const trpcClient = useTRPCClient();
   const [pending, setPending] = useState<PendingCourse[]>([]);
-  const pendingRef = useRef(pending);
-  pendingRef.current = pending;
 
   const channel = useMemo(() => userChannel(userId), [userId]);
 
-  const tokenQuery = useQuery(
-    trpc.realtimeToken.queryOptions(undefined, {
-      // Inngest tokens are short-lived; refetch generously rather than aggressively.
-      staleTime: 5 * 60 * 1000,
-    }),
-  );
-
+  // Stable factory: only changes when the tRPC client identity changes,
+  // which is once per provider mount.
   const tokenFactory = useCallback(async () => {
-    const result = await tokenQuery.refetch();
-    if (!result.data) throw new Error("Failed to mint realtime token");
-    return result.data;
-  }, [tokenQuery]);
+    return await trpcClient.realtimeToken.query();
+  }, [trpcClient]);
 
   const { messages } = useRealtime({
     channel,
     topics: REALTIME_TOPICS,
     token: tokenFactory,
-    enabled: !!tokenQuery.data,
   });
 
   const lastHandledRef = useRef<string | null>(null);
@@ -70,19 +60,24 @@ export function CourseListProvider({ userId, initialCourses, children }: Props) 
     lastHandledRef.current = messageKey;
 
     const data = latest.data as { id: string; title: string };
-    setPending((current) => current.slice(1));
+    setPending((current) => current.filter((entry) => entry.tempId !== data.id));
     toast.success(`"${data.title}" is ready`);
+    // Re-fetches the (server) sidebar courses list and any open curriculum page
+    // that's currently pending data — that's how the loading state ends.
     router.refresh();
-    router.push(`/curricula/${data.id}`);
   }, [messages.byTopic.curriculumReady, router]);
 
   const addPending = useCallback((entry: PendingCourse) => {
     setPending((current) => [...current, entry]);
   }, []);
 
+  const removePending = useCallback((tempId: string) => {
+    setPending((current) => current.filter((entry) => entry.tempId !== tempId));
+  }, []);
+
   const value = useMemo<CourseListContextValue>(
-    () => ({ courses: initialCourses, pending, addPending }),
-    [initialCourses, pending, addPending],
+    () => ({ courses: initialCourses, pending, addPending, removePending }),
+    [initialCourses, pending, addPending, removePending],
   );
 
   return <CourseListContext.Provider value={value}>{children}</CourseListContext.Provider>;

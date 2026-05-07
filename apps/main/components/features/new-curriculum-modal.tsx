@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { PlusIcon } from "lucide-react";
 import { useCourseList } from "./course-list/course-list-provider";
 
@@ -31,6 +32,7 @@ type FormValues = z.infer<typeof formSchema>;
 const NewCurriculumModal = () => {
   const [open, setOpen] = useState(false);
   const trpc = useTRPC();
+  const router = useRouter();
   const { addPending } = useCourseList();
 
   const form = useForm<FormValues>({
@@ -45,13 +47,11 @@ const NewCurriculumModal = () => {
   const { mutate: createCurriculum, isPending } = useMutation(
     trpc.createCurriculum.mutationOptions({
       onSuccess: (_data, variables) => {
-        addPending({
-          tempId: crypto.randomUUID(),
-          subject: variables.subject,
-        });
+        addPending({ tempId: variables.id, subject: variables.subject });
         toast.success("Curriculum creation started");
         form.reset();
         setOpen(false);
+        router.push(`/curricula/${variables.id}`);
       },
       onError: (error) => {
         toast.error(error.message ?? "Failed to create curriculum");
@@ -60,13 +60,13 @@ const NewCurriculumModal = () => {
   );
 
   const onSubmit = (values: FormValues) => {
-    createCurriculum(values);
+    createCurriculum({ ...values, id: crypto.randomUUID() });
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <div className="flex items-center cursor-pointer hover:bg-muted rounded-md p-2">
+        <div className="flex items-center cursor-pointer hover:bg-sidebar-accent rounded-md p-2">
             <PlusIcon className="size-4 mr-2" />
             <span className="text-sm font-medium text-foreground">New Curriculum</span>
         </div>

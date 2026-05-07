@@ -3,6 +3,7 @@ import { baseProcedure, createTRPCRouter, protectedcProcedure } from '../init';
 import { inngest } from '@/inngest/client';
 import { userChannel } from '@/inngest/channels';
 import { getSubscriptionToken } from 'inngest/realtime';
+import prisma from '@/lib/db';
 
 export const appRouter = createTRPCRouter({
   hello: baseProcedure
@@ -19,6 +20,7 @@ export const appRouter = createTRPCRouter({
   createCurriculum: protectedcProcedure
     .input(
       z.object({
+        id: z.string().uuid(),
         subject: z.string(),
         level: z.string(),
         goal: z.string(),
@@ -28,10 +30,27 @@ export const appRouter = createTRPCRouter({
       return await inngest.send({
         name: 'app/curriculum.created',
         data: {
+          id: input.id,
           userId: ctx.userId,
           subject: input.subject,
           level: input.level,
           goal: input.goal,
+        },
+      });
+    }),
+  getCurriculum: protectedcProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return await prisma.curriculum.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: {
+          id: true,
+          title: true,
+          overview: true,
+          subject: true,
+          level: true,
+          goal: true,
+          estimatedDuration: true,
         },
       });
     }),

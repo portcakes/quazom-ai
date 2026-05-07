@@ -1,7 +1,7 @@
-import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth-utils";
 import { getCurriculumById } from "@/lib/queries/curriculum";
 import { CurriculumHero } from "@/components/features/curriculum/curriculum-hero";
+import { CurriculumPending } from "@/components/features/curriculum/curriculum-pending";
 
 type Params = Promise<{ id: string }>;
 
@@ -10,10 +10,14 @@ export default async function CurriculumPage({ params }: { params: Params }) {
   const { id } = await params;
 
   const curriculum = await getCurriculumById(id);
+
+  // If the row isn't there yet, hand off to a client component that polls
+  // (and the layout-level realtime listener will also `router.refresh()` this
+  // server component on the curriculum-ready event). The pending component
+  // surfaces a "not found" state once it gives up, so non-owners and bad ids
+  // still see a clear failure after a timeout.
   if (!curriculum) {
-    // Either it doesn't exist, or the signed-in user doesn't own it.
-    // Surface the same 404 in both cases to avoid leaking existence.
-    notFound();
+    return <CurriculumPending id={id} />;
   }
 
   return (
