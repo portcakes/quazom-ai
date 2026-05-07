@@ -2,11 +2,19 @@
 
 import Link from "next/link";
 import { BookIcon, Loader2Icon } from "lucide-react";
+import { useSidebar } from "@quazom-ai/ui/components/ui/sidebar";
 import { useCourseList } from "./course-list-provider";
 import NewCurriculumModal from "../new-curriculum-modal";
 
 export function CourseList() {
   const { courses, pending } = useCourseList();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  const handleCourseClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   if (courses.length === 0 && pending.length === 0) {
     return <CoursesEmptyState />;
@@ -21,6 +29,7 @@ export function CourseList() {
         <li key={course.id}>
           <Link
             href={`/curricula/${course.id}`}
+            onClick={handleCourseClick}
             className="flex w-full items-center gap-2 rounded-lg bg-card px-3 py-2 text-sm ring-1 ring-foreground/10 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           >
             <BookIcon className="size-4 shrink-0" />

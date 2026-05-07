@@ -22,7 +22,7 @@ export default async function CurriculumPage({ params }: { params: Params }) {
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex min-w-0 flex-col">
       <CurriculumHero
         title={curriculum.title}
         overview={curriculum.overview}

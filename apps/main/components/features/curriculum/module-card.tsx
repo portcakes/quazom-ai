@@ -31,14 +31,16 @@ export function ModuleCard({ module, index }: Props) {
       <DialogTrigger asChild>
         <button
           type="button"
-          className="group flex w-full flex-col gap-3 rounded-xl border border-border bg-card p-5 text-left transition-colors hover:bg-sidebar-accent/40 hover:ring-1 hover:ring-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+          className="group flex w-full min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-5 text-left transition-colors hover:bg-sidebar-accent/40 hover:ring-1 hover:ring-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
         >
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3">
+          <div className="flex w-full items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-sm font-medium text-muted-foreground">
                 {index + 1}
               </span>
-              <h3 className="truncate font-heading text-lg font-semibold">{module.title}</h3>
+              <h3 className="min-w-0 truncate font-heading text-lg font-semibold">
+                {module.title}
+              </h3>
             </div>
             <Badge variant="outline" className="shrink-0">
               {module.lessons.length} {module.lessons.length === 1 ? "lesson" : "lessons"}
@@ -46,9 +48,13 @@ export function ModuleCard({ module, index }: Props) {
           </div>
           <p className="text-sm leading-relaxed text-muted-foreground">{module.summary}</p>
           {module.objectives.length > 0 ? (
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="flex w-full flex-wrap gap-2 pt-1">
               {module.objectives.map((objective) => (
-                <Badge key={objective} variant="secondary" className="font-normal">
+                <Badge
+                  key={objective}
+                  variant="secondary"
+                  className="h-auto max-w-full whitespace-normal py-1 text-left font-normal"
+                >
                   {objective}
                 </Badge>
               ))}
