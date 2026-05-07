@@ -14,6 +14,7 @@ export function CourseList() {
 
   return (
     <ul className="flex flex-col gap-2">
+      <NewCurriculumModal />
       {courses.map((course) => (
         <li key={course.id}>
           <Link
