@@ -2,6 +2,7 @@ import { requireAuth } from "@/lib/auth-utils";
 import { getCurriculumById } from "@/lib/queries/curriculum";
 import { CurriculumHero } from "@/components/features/curriculum/curriculum-hero";
 import { CurriculumPending } from "@/components/features/curriculum/curriculum-pending";
+import { CurriculumTabs } from "@/components/features/curriculum/curriculum-tabs";
 
 type Params = Promise<{ id: string }>;
 
@@ -27,6 +28,11 @@ export default async function CurriculumPage({ params }: { params: Params }) {
         overview={curriculum.overview}
         level={curriculum.level}
         estimatedDuration={curriculum.estimatedDuration}
+      />
+      <CurriculumTabs
+        objectives={curriculum.objectives}
+        modules={curriculum.modules}
+        resources={curriculum.recommendedResources}
       />
     </div>
   );

@@ -9,7 +9,7 @@ type Props = {
 
 export function CurriculumHero({ title, overview, level, estimatedDuration }: Props) {
   return (
-    <section className="border-b border-border bg-gradient-to-b from-muted/40 to-background">
+    <section className="border-b border-border bg-gradient-to-b from-muted/40 to-background sticky top-0 z-10 bg-background">
       <div className="mx-auto flex max-w-4xl flex-col gap-4 px-6 py-12">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary" className="capitalize">
