@@ -42,10 +42,12 @@ export function ResourcesTab({ resources }: Props) {
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Search For
             </span>
-            <p className="flex min-w-0 items-center gap-2 rounded-md bg-muted px-3 py-2 font-mono text-sm">
-              <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate">{resource.searchQuery}</span>
-            </p>
+            <a href={`https://www.google.com/search?q=${resource.searchQuery}`} target="_blank" rel="noopener noreferrer">
+              <p className="flex min-w-0 items-center gap-2 rounded-md bg-muted px-3 py-2 font-mono text-sm">
+                <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="truncate">{resource.searchQuery}</span>
+              </p>
+            </a>
           </div>
         </li>
       ))}
