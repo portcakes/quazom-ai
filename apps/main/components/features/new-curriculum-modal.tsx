@@ -14,6 +14,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { useState } from "react";
 import { PlusIcon } from "lucide-react";
+import { useCourseList } from "./course-list/course-list-provider";
 
 const formSchema = z.object({
   subject: z.string().min(1, "Subject is required").max(100, "Subject must be less than 100 characters"),
@@ -30,6 +31,7 @@ type FormValues = z.infer<typeof formSchema>;
 const NewCurriculumModal = () => {
   const [open, setOpen] = useState(false);
   const trpc = useTRPC();
+  const { addPending } = useCourseList();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -42,7 +44,11 @@ const NewCurriculumModal = () => {
 
   const { mutate: createCurriculum, isPending } = useMutation(
     trpc.createCurriculum.mutationOptions({
-      onSuccess: () => {
+      onSuccess: (_data, variables) => {
+        addPending({
+          tempId: crypto.randomUUID(),
+          subject: variables.subject,
+        });
         toast.success("Curriculum creation started");
         form.reset();
         setOpen(false);

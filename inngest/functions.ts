@@ -1,4 +1,5 @@
 import { inngest } from "./client";
+import { userChannel } from "./channels";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -91,6 +92,12 @@ Sequence modules from foundational to advanced. Each lesson must have a concrete
         select: { id: true, title: true },
       });
     });
+
+    await step.realtime.publish(
+      "publish-curriculum-ready",
+      userChannel(event.data.userId).curriculumReady,
+      { id: saved.id, title: saved.title },
+    );
 
     return { curriculumId: saved.id, title: saved.title };
   },
