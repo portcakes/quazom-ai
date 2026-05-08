@@ -5,7 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useRealtime } from "inngest/react";
 import { toast } from "sonner";
-import { Loader2Icon, SendIcon } from "lucide-react";
+import { CheckCircle2Icon, Loader2Icon, SendIcon } from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { Textarea } from "@quazom-ai/ui/components/ui/textarea";
 import { useTRPC, useTRPCClient } from "@/trpc/client";
@@ -18,6 +18,10 @@ type Props = {
 };
 
 const REALTIME_TOPICS = ["discussionMessageReady"] as const;
+// User-facing copy for the structured 2-turn flow. Keep these in sync with
+// the inngest reply function — the AI alternates "first response" → "final
+// response" based on user-turn count.
+const MAX_USER_TURNS = 2;
 
 export function DiscussionView({ lesson, userId }: Props) {
   const router = useRouter();
@@ -79,10 +83,32 @@ export function DiscussionView({ lesson, userId }: Props) {
     return <p className="text-sm text-muted-foreground">No discussion available.</p>;
   }
 
+  const userTurnsSoFar = discussion.chatHistory.filter((m) => m.role === "user").length;
+  const userTurnsRemaining = Math.max(0, MAX_USER_TURNS - userTurnsSoFar);
+  const isClosed = discussion.isCompleted;
+  const inputDisabled = isClosed || waitingForReply || send.isPending;
+  const placeholder = isClosed
+    ? "This discussion is closed."
+    : userTurnsSoFar === 0
+      ? "Share your take on the prompt… (⌘/Ctrl + Enter to send)"
+      : "Follow up with one final reply… (⌘/Ctrl + Enter to send)";
+
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
-        <h2 className="font-heading text-lg font-semibold">Topic</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-heading text-lg font-semibold">Topic</h2>
+          {isClosed ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2Icon className="size-3.5" />
+              Complete
+            </span>
+          ) : (
+            <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground">
+              {userTurnsRemaining} {userTurnsRemaining === 1 ? "reply" : "replies"} left
+            </span>
+          )}
+        </div>
         <p className="text-sm leading-relaxed text-muted-foreground">{discussion.summary}</p>
         {discussion.objectives.length > 0 ? (
           <ul className="flex flex-wrap gap-1.5 pt-1">
@@ -97,6 +123,12 @@ export function DiscussionView({ lesson, userId }: Props) {
                 </li>
               ))}
           </ul>
+        ) : null}
+        {!isClosed ? (
+          <p className="text-xs text-muted-foreground">
+            Discussions are short by design: respond to the prompt, get a take
+            from the tutor, then wrap with one follow-up.
+          </p>
         ) : null}
       </section>
 
@@ -120,11 +152,19 @@ export function DiscussionView({ lesson, userId }: Props) {
               Thinking…
             </div>
           ) : null}
+          {isClosed && !waitingForReply ? (
+            <div className="mt-2 flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2Icon className="size-4" />
+              Discussion complete — nicely done. You can&apos;t send any more
+              messages here.
+            </div>
+          ) : null}
         </div>
 
         <form
           onSubmit={(e) => {
             e.preventDefault();
+            if (isClosed) return;
             const trimmed = draft.trim();
             if (!trimmed) return;
             send.mutate({ discussionId: discussion.id, content: trimmed });
@@ -137,19 +177,20 @@ export function DiscussionView({ lesson, userId }: Props) {
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
+                if (isClosed) return;
                 const trimmed = draft.trim();
                 if (trimmed)
                   send.mutate({ discussionId: discussion.id, content: trimmed });
               }
             }}
-            placeholder="Reply to the tutor… (⌘/Ctrl + Enter to send)"
+            placeholder={placeholder}
             className="min-h-[80px]"
             maxLength={2000}
-            disabled={send.isPending}
+            disabled={inputDisabled}
           />
           <Button
             type="submit"
-            disabled={!draft.trim() || send.isPending}
+            disabled={!draft.trim() || inputDisabled}
             className="cursor-pointer"
           >
             <SendIcon className="size-4" />

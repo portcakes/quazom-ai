@@ -55,3 +55,11 @@ export const StudyTimeSlot = {
 } as const
 
 export type StudyTimeSlot = (typeof StudyTimeSlot)[keyof typeof StudyTimeSlot]
+
+
+export const AccountAction = {
+  DISABLE: 'DISABLE',
+  DELETE: 'DELETE'
+} as const
+
+export type AccountAction = (typeof AccountAction)[keyof typeof AccountAction]

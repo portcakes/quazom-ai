@@ -8,7 +8,10 @@ export type CurrentUser = {
   id: string;
   firstName: string;
   fullName: string;
+  email: string;
   avatarUrl: string | null;
+  isAlpha: boolean;
+  isDisabled: boolean;
 };
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
@@ -17,7 +20,14 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, name: true, image: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+      isAlpha: true,
+      isDisabled: true,
+    },
   });
   if (!user) return null;
 
@@ -27,6 +37,9 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     id: user.id,
     firstName,
     fullName,
+    email: user.email,
     avatarUrl: user.image,
+    isAlpha: user.isAlpha,
+    isDisabled: user.isDisabled,
   };
 }

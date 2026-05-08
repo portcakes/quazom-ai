@@ -622,12 +622,24 @@ export const replyToDiscussion = inngest.createFunction(
     const history = (discussion.chatHistory ?? []) as DiscussionMessage[];
     const objectivesText = JSON.stringify(discussion.objectives);
 
+    // Each discussion is intentionally short: opening prompt → user → AI →
+    // user → AI (final). Pick the right system prompt + completion flag based
+    // on which user turn we're replying to.
+    const userTurnsSoFar = history.filter((m) => m.role === "user").length;
+    const isFinalReply = userTurnsSoFar >= 2;
+
+    const turnInstruction = isFinalReply
+      ? `This is your closing turn. The learner has given a follow-up to your prior response. Build on what they said: validate where they're right, push back gently where they're not, and tie everything back to the discussion's objectives. End with a brief takeaway — no new questions, the discussion is wrapping up.`
+      : `This is your first reply. Read the learner's stance and pick a side: clearly agree or disagree with their take, then defend that position with a concrete example or piece of evidence. Close with one focused follow-up question that pushes the learner to refine or defend their view.`;
+
     const reply = await step.ai.wrap("gemini-discussion-reply", generateText, {
       model: google(MODEL),
-      system: `You are an inquisitive, supportive tutor leading a Socratic discussion on "${discussion.title}". Push the learner with thoughtful follow-up questions, gently correct misconceptions, and reference the discussion's objectives. Keep replies under 200 words.
+      system: `You are an inquisitive, supportive tutor leading a focused two-turn discussion on "${discussion.title}". Keep replies under 200 words and reference the discussion's objectives where relevant.
 
 Discussion summary: ${discussion.summary}
-Objectives: ${objectivesText}`,
+Objectives: ${objectivesText}
+
+${turnInstruction}`,
       messages: history.map((m) => ({ role: m.role, content: m.content })),
     });
 
@@ -640,7 +652,13 @@ Objectives: ${objectivesText}`,
       ];
       await prisma.discussion.update({
         where: { id: discussionId },
-        data: { chatHistory: next },
+        data: {
+          chatHistory: next,
+          // Final AI turn closes the conversation. The UI uses
+          // `isCompleted` to lock the input; the tRPC layer also blocks
+          // sends past this point so a stale tab can't bypass the cap.
+          ...(isFinalReply ? { isCompleted: true } : {}),
+        },
       });
     });
 
@@ -650,7 +668,7 @@ Objectives: ${objectivesText}`,
       { discussionId, lessonId },
     );
 
-    return { discussionId };
+    return { discussionId, isCompleted: isFinalReply };
   },
 );
 

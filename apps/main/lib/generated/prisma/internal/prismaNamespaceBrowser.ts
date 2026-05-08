@@ -68,6 +68,7 @@ export const ModelName = {
   UserEvaluations: 'UserEvaluations',
   StudySchedule: 'StudySchedule',
   StudySession: 'StudySession',
+  AccountFeedback: 'AccountFeedback',
   CheckIn: 'CheckIn'
 } as const
 
@@ -93,6 +94,9 @@ export const UserScalarFieldEnum = {
   email: 'email',
   emailVerified: 'emailVerified',
   image: 'image',
+  isAlpha: 'isAlpha',
+  isDisabled: 'isDisabled',
+  disabledAt: 'disabledAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -366,6 +370,18 @@ export const StudySessionScalarFieldEnum = {
 } as const
 
 export type StudySessionScalarFieldEnum = (typeof StudySessionScalarFieldEnum)[keyof typeof StudySessionScalarFieldEnum]
+
+
+export const AccountFeedbackScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  email: 'email',
+  action: 'action',
+  reason: 'reason',
+  createdAt: 'createdAt'
+} as const
+
+export type AccountFeedbackScalarFieldEnum = (typeof AccountFeedbackScalarFieldEnum)[keyof typeof AccountFeedbackScalarFieldEnum]
 
 
 export const CheckInScalarFieldEnum = {

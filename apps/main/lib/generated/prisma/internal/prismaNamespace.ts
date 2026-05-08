@@ -401,6 +401,7 @@ export const ModelName = {
   UserEvaluations: 'UserEvaluations',
   StudySchedule: 'StudySchedule',
   StudySession: 'StudySession',
+  AccountFeedback: 'AccountFeedback',
   CheckIn: 'CheckIn'
 } as const
 
@@ -417,7 +418,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "session" | "account" | "verification" | "curriculum" | "module" | "lesson" | "video" | "quiz" | "exercise" | "project" | "discussion" | "readings" | "note" | "userEvaluations" | "studySchedule" | "studySession" | "checkIn"
+    modelProps: "user" | "session" | "account" | "verification" | "curriculum" | "module" | "lesson" | "video" | "quiz" | "exercise" | "project" | "discussion" | "readings" | "note" | "userEvaluations" | "studySchedule" | "studySession" | "accountFeedback" | "checkIn"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1679,6 +1680,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    AccountFeedback: {
+      payload: Prisma.$AccountFeedbackPayload<ExtArgs>
+      fields: Prisma.AccountFeedbackFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.AccountFeedbackFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountFeedbackPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.AccountFeedbackFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountFeedbackPayload>
+        }
+        findFirst: {
+          args: Prisma.AccountFeedbackFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountFeedbackPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.AccountFeedbackFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountFeedbackPayload>
+        }
+        findMany: {
+          args: Prisma.AccountFeedbackFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountFeedbackPayload>[]
+        }
+        create: {
+          args: Prisma.AccountFeedbackCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountFeedbackPayload>
+        }
+        createMany: {
+          args: Prisma.AccountFeedbackCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.AccountFeedbackCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountFeedbackPayload>[]
+        }
+        delete: {
+          args: Prisma.AccountFeedbackDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountFeedbackPayload>
+        }
+        update: {
+          args: Prisma.AccountFeedbackUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountFeedbackPayload>
+        }
+        deleteMany: {
+          args: Prisma.AccountFeedbackDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.AccountFeedbackUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.AccountFeedbackUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountFeedbackPayload>[]
+        }
+        upsert: {
+          args: Prisma.AccountFeedbackUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountFeedbackPayload>
+        }
+        aggregate: {
+          args: Prisma.AccountFeedbackAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAccountFeedback>
+        }
+        groupBy: {
+          args: Prisma.AccountFeedbackGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AccountFeedbackGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.AccountFeedbackCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AccountFeedbackCountAggregateOutputType> | number
+        }
+      }
+    }
     CheckIn: {
       payload: Prisma.$CheckInPayload<ExtArgs>
       fields: Prisma.CheckInFieldRefs
@@ -1798,6 +1873,9 @@ export const UserScalarFieldEnum = {
   email: 'email',
   emailVerified: 'emailVerified',
   image: 'image',
+  isAlpha: 'isAlpha',
+  isDisabled: 'isDisabled',
+  disabledAt: 'disabledAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -2073,6 +2151,18 @@ export const StudySessionScalarFieldEnum = {
 export type StudySessionScalarFieldEnum = (typeof StudySessionScalarFieldEnum)[keyof typeof StudySessionScalarFieldEnum]
 
 
+export const AccountFeedbackScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  email: 'email',
+  action: 'action',
+  reason: 'reason',
+  createdAt: 'createdAt'
+} as const
+
+export type AccountFeedbackScalarFieldEnum = (typeof AccountFeedbackScalarFieldEnum)[keyof typeof AccountFeedbackScalarFieldEnum]
+
+
 export const CheckInScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
@@ -2257,6 +2347,20 @@ export type EnumStudyTimeSlotFieldRefInput<$PrismaModel> = FieldRefInputType<$Pr
 
 
 /**
+ * Reference to a field of type 'AccountAction'
+ */
+export type EnumAccountActionFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AccountAction'>
+    
+
+
+/**
+ * Reference to a field of type 'AccountAction[]'
+ */
+export type ListEnumAccountActionFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AccountAction[]'>
+    
+
+
+/**
  * Reference to a field of type 'Float'
  */
 export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
@@ -2396,6 +2500,7 @@ export type GlobalOmitConfig = {
   userEvaluations?: Prisma.UserEvaluationsOmit
   studySchedule?: Prisma.StudyScheduleOmit
   studySession?: Prisma.StudySessionOmit
+  accountFeedback?: Prisma.AccountFeedbackOmit
   checkIn?: Prisma.CheckInOmit
 }
 

@@ -1,11 +1,23 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { baseProcedure, createTRPCRouter, protectedcProcedure } from '../init';
+import {
+  activeUserProcedure,
+  baseProcedure,
+  createTRPCRouter,
+  protectedcProcedure,
+} from '../init';
 import { inngest } from '@/inngest/client';
 import { userChannel, userChannelTopics } from '@/inngest/channels';
 import { getSubscriptionToken } from 'inngest/realtime';
 import prisma from '@/lib/db';
 import { NOTE_MAX_LENGTH, type QuizQuestion } from '@/inngest/schemas';
+import {
+  ALPHA_LIMITS,
+  countCurriculaForUser,
+  countLessonGenerationsThisMonth,
+  countDiscussionGenerationsThisMonth,
+  type AlphaUsageSnapshot,
+} from '@/lib/alpha-limits';
 import {
   generateSchedule,
   normalizeDateFromDb,
@@ -56,7 +68,7 @@ export const appRouter = createTRPCRouter({
         greeting: `hello ${opts.input.text}`,
       };
     }),
-  createCurriculum: protectedcProcedure
+  createCurriculum: activeUserProcedure
     .input(
       z.object({
         id: z.string().uuid(),
@@ -66,6 +78,21 @@ export const appRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // Alpha-tier cost guard: cap total curricula at ALPHA_LIMITS.curricula
+      // to keep generation spend bounded while we're free.
+      const user = await prisma.user.findUnique({
+        where: { id: ctx.userId },
+        select: { isAlpha: true },
+      });
+      if (user?.isAlpha) {
+        const used = await countCurriculaForUser(ctx.userId);
+        if (used >= ALPHA_LIMITS.curricula) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: `Alpha plan is limited to ${ALPHA_LIMITS.curricula} curricula. Delete one to free up a slot.`,
+          });
+        }
+      }
       return await inngest.send({
         name: 'app/curriculum.created',
         data: {
@@ -139,7 +166,7 @@ export const appRouter = createTRPCRouter({
   // ---------------------------------------------------------------------
   // Lessons
   // ---------------------------------------------------------------------
-  generateLesson: protectedcProcedure
+  generateLesson: activeUserProcedure
     .input(z.object({ lessonId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       // Auth check: the lesson must belong to a curriculum the user owns.
@@ -148,6 +175,7 @@ export const appRouter = createTRPCRouter({
         select: {
           id: true,
           status: true,
+          activityType: true,
           module: {
             select: { curriculum: { select: { userId: true } } },
           },
@@ -160,6 +188,38 @@ export const appRouter = createTRPCRouter({
       // when status is FAILED so the user can recover.
       if (lesson.status === 'GENERATING') {
         return { ok: true, alreadyRunning: true };
+      }
+
+      // Alpha-tier monthly caps. We only count towards the cap when this is a
+      // *fresh* generation — a STUB lesson going to GENERATING. Retries on a
+      // FAILED lesson would have already counted the first time around, so
+      // they don't count again here.
+      const user = await prisma.user.findUnique({
+        where: { id: ctx.userId },
+        select: { isAlpha: true },
+      });
+      if (user?.isAlpha && lesson.status === 'STUB') {
+        const [lessonsUsed, discussionsUsed] = await Promise.all([
+          countLessonGenerationsThisMonth(ctx.userId),
+          lesson.activityType === 'DISCUSSION'
+            ? countDiscussionGenerationsThisMonth(ctx.userId)
+            : Promise.resolve(0),
+        ]);
+        if (lessonsUsed >= ALPHA_LIMITS.lessonsPerMonth) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: `Alpha plan is limited to ${ALPHA_LIMITS.lessonsPerMonth} lesson generations per month. The cap resets on the 1st.`,
+          });
+        }
+        if (
+          lesson.activityType === 'DISCUSSION' &&
+          discussionsUsed >= ALPHA_LIMITS.discussionsPerMonth
+        ) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: `Alpha plan is limited to ${ALPHA_LIMITS.discussionsPerMonth} discussion lessons per month. The cap resets on the 1st.`,
+          });
+        }
       }
 
       await inngest.send({
@@ -350,7 +410,7 @@ export const appRouter = createTRPCRouter({
       });
       return { ok: true };
     }),
-  sendDiscussionMessage: protectedcProcedure
+  sendDiscussionMessage: activeUserProcedure
     .input(
       z.object({
         discussionId: z.string(),
@@ -372,10 +432,28 @@ export const appRouter = createTRPCRouter({
       if (!discussion || discussion.lesson.module.curriculum.userId !== ctx.userId) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Discussion not found' });
       }
+      if (discussion.isCompleted) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'This discussion is already complete.',
+        });
+      }
 
       const history = Array.isArray(discussion.chatHistory)
         ? (discussion.chatHistory as Array<{ role: string; content: string; createdAt: string }>)
         : [];
+
+      // Discussions are intentionally short — opening prompt → user → AI →
+      // user → AI (final). Cap the learner at 2 turns so a runaway client
+      // can't extend the chat past the close.
+      const userTurns = history.filter((m) => m.role === 'user').length;
+      if (userTurns >= 2) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Discussions only allow two replies before closing.',
+        });
+      }
+
       const next = [
         ...history,
         { role: 'user' as const, content: input.content, createdAt: new Date().toISOString() },
@@ -735,6 +813,169 @@ export const appRouter = createTRPCRouter({
       lastCheckIn: summary.lastCheckIn,
     };
   }),
+
+  // ---------------------------------------------------------------------
+  // Settings / account management
+  // ---------------------------------------------------------------------
+  getProfile: protectedcProcedure.query(async ({ ctx }) => {
+    const user = await prisma.user.findUnique({
+      where: { id: ctx.userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        isAlpha: true,
+        isDisabled: true,
+      },
+    });
+    if (!user) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+    }
+    return user;
+  }),
+  getAlphaUsage: protectedcProcedure.query(async ({ ctx }) => {
+    const [user, curricula, lessons, discussions] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: ctx.userId },
+        select: { isAlpha: true },
+      }),
+      countCurriculaForUser(ctx.userId),
+      countLessonGenerationsThisMonth(ctx.userId),
+      countDiscussionGenerationsThisMonth(ctx.userId),
+    ]);
+
+    const snapshot: AlphaUsageSnapshot = {
+      isAlpha: user?.isAlpha ?? false,
+      curricula: {
+        used: curricula,
+        limit: ALPHA_LIMITS.curricula,
+        remaining: Math.max(0, ALPHA_LIMITS.curricula - curricula),
+      },
+      lessonsThisMonth: {
+        used: lessons,
+        limit: ALPHA_LIMITS.lessonsPerMonth,
+        remaining: Math.max(0, ALPHA_LIMITS.lessonsPerMonth - lessons),
+      },
+      discussionsThisMonth: {
+        used: discussions,
+        limit: ALPHA_LIMITS.discussionsPerMonth,
+        remaining: Math.max(0, ALPHA_LIMITS.discussionsPerMonth - discussions),
+      },
+    };
+    return snapshot;
+  }),
+  updateProfile: activeUserProcedure
+    .input(
+      z.object({
+        name: z
+          .string()
+          .min(1, 'Name is required')
+          .max(120, 'Name must be 120 characters or fewer'),
+        // We accept either an http(s) URL or an empty string to clear the
+        // avatar. Validating as URL keeps the <AvatarImage> safe to render.
+        image: z
+          .string()
+          .max(2048, 'URL is too long')
+          .refine((v) => v === '' || z.url().safeParse(v).success, {
+            message: 'Avatar must be a valid URL',
+          }),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const updated = await prisma.user.update({
+        where: { id: ctx.userId },
+        data: {
+          name: input.name.trim(),
+          image: input.image.trim() === '' ? null : input.image.trim(),
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+        },
+      });
+      return updated;
+    }),
+  disableAccount: activeUserProcedure
+    .input(
+      z.object({
+        reason: z
+          .string()
+          .min(1, 'Please tell us why')
+          .max(2000, 'Reason is too long'),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Two writes in a transaction so we never lose the survey row even if a
+      // later step fails — qualitative signal is the whole point of the modal.
+      await prisma.$transaction(async (tx) => {
+        const user = await tx.user.findUnique({
+          where: { id: ctx.userId },
+          select: { email: true },
+        });
+        if (!user) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+        }
+        await tx.accountFeedback.create({
+          data: {
+            id: crypto.randomUUID(),
+            userId: ctx.userId,
+            email: user.email,
+            action: 'DISABLE',
+            reason: input.reason.trim(),
+          },
+        });
+        await tx.user.update({
+          where: { id: ctx.userId },
+          data: { isDisabled: true, disabledAt: new Date() },
+        });
+        // Wipe sessions so all open tabs land on /account-disabled on next
+        // request — the user must explicitly re-enable to come back in.
+        await tx.session.deleteMany({ where: { userId: ctx.userId } });
+      });
+      return { ok: true };
+    }),
+  enableAccount: protectedcProcedure.mutation(async ({ ctx }) => {
+    await prisma.user.update({
+      where: { id: ctx.userId },
+      data: { isDisabled: false, disabledAt: null },
+    });
+    return { ok: true };
+  }),
+  deleteAccount: protectedcProcedure
+    .input(
+      z.object({
+        reason: z
+          .string()
+          .min(1, 'Please tell us why')
+          .max(2000, 'Reason is too long'),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // AccountFeedback is intentionally NOT a relation to User — the row
+      // survives the cascade so we can review it after the account is gone.
+      const user = await prisma.user.findUnique({
+        where: { id: ctx.userId },
+        select: { email: true },
+      });
+      if (!user) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+      }
+      await prisma.accountFeedback.create({
+        data: {
+          id: crypto.randomUUID(),
+          userId: ctx.userId,
+          email: user.email,
+          action: 'DELETE',
+          reason: input.reason.trim(),
+        },
+      });
+      // Cascading FKs on Session/Account/Curriculum/etc. clean up downstream.
+      await prisma.user.delete({ where: { id: ctx.userId } });
+      return { ok: true };
+    }),
 
   realtimeToken: protectedcProcedure
     .output(

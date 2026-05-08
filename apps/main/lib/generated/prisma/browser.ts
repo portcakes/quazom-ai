@@ -103,6 +103,11 @@ export type StudySchedule = Prisma.StudyScheduleModel
  */
 export type StudySession = Prisma.StudySessionModel
 /**
+ * Model AccountFeedback
+ * 
+ */
+export type AccountFeedback = Prisma.AccountFeedbackModel
+/**
  * Model CheckIn
  * 
  */

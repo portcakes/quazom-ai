@@ -19,6 +19,15 @@ model User {
   email           String
   emailVerified   Boolean           @default(false)
   image           String?
+  // Alpha-program flag. Drives the per-user generation limits (curricula,
+  // lessons, discussions) — every existing and new user defaults to true
+  // until the alpha period ends.
+  isAlpha         Boolean           @default(true)
+  // Soft-disable. When true, the user can sign in but `requireAuth` bounces
+  // them to /account-disabled where they can re-enable or sign out. Hard
+  // deletes go through Better Auth + Prisma cascade and do not set this.
+  isDisabled      Boolean           @default(false)
+  disabledAt      DateTime?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   sessions        Session[]
@@ -416,6 +425,27 @@ model StudySession {
   @@index([scheduleId])
   @@index([userId, date])
   @@map("study_session")
+}
+
+// Why-are-you-leaving survey rows captured when a user disables or deletes
+// their account. Intentionally NOT a relation to User: deletion cascades
+// would wipe these out, and the whole point is to keep the qualitative
+// signal even after the user is gone.
+enum AccountAction {
+  DISABLE
+  DELETE
+}
+
+model AccountFeedback {
+  id        String        @id
+  userId    String
+  email     String
+  action    AccountAction
+  reason    String
+  createdAt DateTime      @default(now())
+
+  @@index([action])
+  @@map("account_feedback")
 }
 
 // Daily check-ins. Streak is derived from these rows (no denormalised counter
