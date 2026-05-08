@@ -28,6 +28,14 @@ model User {
   // deletes go through Better Auth + Prisma cascade and do not set this.
   isDisabled      Boolean           @default(false)
   disabledAt      DateTime?
+  // First-time onboarding gate. Defaults to false on signup; flips true
+  // once the user finishes (or skips) the onboarding survey. `requireAuth`
+  // bounces non-onboarded users to /onboarding.
+  isOnboarded     Boolean           @default(false)
+  // Optional answer to the "how did you hear about Quazom?" survey shown at
+  // the end of onboarding. Single-column for now; if the survey grows we'll
+  // promote this to its own table.
+  referralSource  String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   sessions        Session[]

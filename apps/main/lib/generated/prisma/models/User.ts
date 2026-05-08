@@ -33,6 +33,8 @@ export type UserMinAggregateOutputType = {
   isAlpha: boolean | null
   isDisabled: boolean | null
   disabledAt: Date | null
+  isOnboarded: boolean | null
+  referralSource: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -46,6 +48,8 @@ export type UserMaxAggregateOutputType = {
   isAlpha: boolean | null
   isDisabled: boolean | null
   disabledAt: Date | null
+  isOnboarded: boolean | null
+  referralSource: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -59,6 +63,8 @@ export type UserCountAggregateOutputType = {
   isAlpha: number
   isDisabled: number
   disabledAt: number
+  isOnboarded: number
+  referralSource: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -74,6 +80,8 @@ export type UserMinAggregateInputType = {
   isAlpha?: true
   isDisabled?: true
   disabledAt?: true
+  isOnboarded?: true
+  referralSource?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -87,6 +95,8 @@ export type UserMaxAggregateInputType = {
   isAlpha?: true
   isDisabled?: true
   disabledAt?: true
+  isOnboarded?: true
+  referralSource?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -100,6 +110,8 @@ export type UserCountAggregateInputType = {
   isAlpha?: true
   isDisabled?: true
   disabledAt?: true
+  isOnboarded?: true
+  referralSource?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -186,6 +198,8 @@ export type UserGroupByOutputType = {
   isAlpha: boolean
   isDisabled: boolean
   disabledAt: Date | null
+  isOnboarded: boolean
+  referralSource: string | null
   createdAt: Date
   updatedAt: Date
   _count: UserCountAggregateOutputType | null
@@ -220,6 +234,8 @@ export type UserWhereInput = {
   isAlpha?: Prisma.BoolFilter<"User"> | boolean
   isDisabled?: Prisma.BoolFilter<"User"> | boolean
   disabledAt?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
+  isOnboarded?: Prisma.BoolFilter<"User"> | boolean
+  referralSource?: Prisma.StringNullableFilter<"User"> | string | null
   createdAt?: Prisma.DateTimeFilter<"User"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"User"> | Date | string
   sessions?: Prisma.SessionListRelationFilter
@@ -241,6 +257,8 @@ export type UserOrderByWithRelationInput = {
   isAlpha?: Prisma.SortOrder
   isDisabled?: Prisma.SortOrder
   disabledAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  isOnboarded?: Prisma.SortOrder
+  referralSource?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   sessions?: Prisma.SessionOrderByRelationAggregateInput
@@ -265,6 +283,8 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   isAlpha?: Prisma.BoolFilter<"User"> | boolean
   isDisabled?: Prisma.BoolFilter<"User"> | boolean
   disabledAt?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
+  isOnboarded?: Prisma.BoolFilter<"User"> | boolean
+  referralSource?: Prisma.StringNullableFilter<"User"> | string | null
   createdAt?: Prisma.DateTimeFilter<"User"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"User"> | Date | string
   sessions?: Prisma.SessionListRelationFilter
@@ -286,6 +306,8 @@ export type UserOrderByWithAggregationInput = {
   isAlpha?: Prisma.SortOrder
   isDisabled?: Prisma.SortOrder
   disabledAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  isOnboarded?: Prisma.SortOrder
+  referralSource?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.UserCountOrderByAggregateInput
@@ -305,6 +327,8 @@ export type UserScalarWhereWithAggregatesInput = {
   isAlpha?: Prisma.BoolWithAggregatesFilter<"User"> | boolean
   isDisabled?: Prisma.BoolWithAggregatesFilter<"User"> | boolean
   disabledAt?: Prisma.DateTimeNullableWithAggregatesFilter<"User"> | Date | string | null
+  isOnboarded?: Prisma.BoolWithAggregatesFilter<"User"> | boolean
+  referralSource?: Prisma.StringNullableWithAggregatesFilter<"User"> | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"User"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"User"> | Date | string
 }
@@ -318,6 +342,8 @@ export type UserCreateInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
@@ -339,6 +365,8 @@ export type UserUncheckedCreateInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
@@ -360,6 +388,8 @@ export type UserUpdateInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
@@ -381,6 +411,8 @@ export type UserUncheckedUpdateInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -402,6 +434,8 @@ export type UserCreateManyInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -415,6 +449,8 @@ export type UserUpdateManyMutationInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -428,6 +464,8 @@ export type UserUncheckedUpdateManyInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -441,6 +479,8 @@ export type UserCountOrderByAggregateInput = {
   isAlpha?: Prisma.SortOrder
   isDisabled?: Prisma.SortOrder
   disabledAt?: Prisma.SortOrder
+  isOnboarded?: Prisma.SortOrder
+  referralSource?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -454,6 +494,8 @@ export type UserMaxOrderByAggregateInput = {
   isAlpha?: Prisma.SortOrder
   isDisabled?: Prisma.SortOrder
   disabledAt?: Prisma.SortOrder
+  isOnboarded?: Prisma.SortOrder
+  referralSource?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -467,6 +509,8 @@ export type UserMinOrderByAggregateInput = {
   isAlpha?: Prisma.SortOrder
   isDisabled?: Prisma.SortOrder
   disabledAt?: Prisma.SortOrder
+  isOnboarded?: Prisma.SortOrder
+  referralSource?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -617,6 +661,8 @@ export type UserCreateWithoutSessionsInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
@@ -637,6 +683,8 @@ export type UserUncheckedCreateWithoutSessionsInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
@@ -673,6 +721,8 @@ export type UserUpdateWithoutSessionsInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
@@ -693,6 +743,8 @@ export type UserUncheckedUpdateWithoutSessionsInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
@@ -713,6 +765,8 @@ export type UserCreateWithoutAccountsInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
@@ -733,6 +787,8 @@ export type UserUncheckedCreateWithoutAccountsInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
@@ -769,6 +825,8 @@ export type UserUpdateWithoutAccountsInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
@@ -789,6 +847,8 @@ export type UserUncheckedUpdateWithoutAccountsInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -809,6 +869,8 @@ export type UserCreateWithoutCurriculaInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
@@ -829,6 +891,8 @@ export type UserUncheckedCreateWithoutCurriculaInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
@@ -865,6 +929,8 @@ export type UserUpdateWithoutCurriculaInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
@@ -885,6 +951,8 @@ export type UserUncheckedUpdateWithoutCurriculaInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -905,6 +973,8 @@ export type UserCreateWithoutNotesInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
@@ -925,6 +995,8 @@ export type UserUncheckedCreateWithoutNotesInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
@@ -961,6 +1033,8 @@ export type UserUpdateWithoutNotesInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
@@ -981,6 +1055,8 @@ export type UserUncheckedUpdateWithoutNotesInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -1001,6 +1077,8 @@ export type UserCreateWithoutUserEvaluationsInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
@@ -1021,6 +1099,8 @@ export type UserUncheckedCreateWithoutUserEvaluationsInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
@@ -1057,6 +1137,8 @@ export type UserUpdateWithoutUserEvaluationsInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
@@ -1077,6 +1159,8 @@ export type UserUncheckedUpdateWithoutUserEvaluationsInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -1097,6 +1181,8 @@ export type UserCreateWithoutStudySchedulesInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
@@ -1117,6 +1203,8 @@ export type UserUncheckedCreateWithoutStudySchedulesInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
@@ -1153,6 +1241,8 @@ export type UserUpdateWithoutStudySchedulesInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
@@ -1173,6 +1263,8 @@ export type UserUncheckedUpdateWithoutStudySchedulesInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -1193,6 +1285,8 @@ export type UserCreateWithoutStudySessionsInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
@@ -1213,6 +1307,8 @@ export type UserUncheckedCreateWithoutStudySessionsInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
@@ -1249,6 +1345,8 @@ export type UserUpdateWithoutStudySessionsInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
@@ -1269,6 +1367,8 @@ export type UserUncheckedUpdateWithoutStudySessionsInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -1289,6 +1389,8 @@ export type UserCreateWithoutCheckInsInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
@@ -1309,6 +1411,8 @@ export type UserUncheckedCreateWithoutCheckInsInput = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: Date | string | null
+  isOnboarded?: boolean
+  referralSource?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
@@ -1345,6 +1449,8 @@ export type UserUpdateWithoutCheckInsInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
@@ -1365,6 +1471,8 @@ export type UserUncheckedUpdateWithoutCheckInsInput = {
   isAlpha?: Prisma.BoolFieldUpdateOperationsInput | boolean
   isDisabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  isOnboarded?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  referralSource?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -1479,6 +1587,8 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: boolean
+  isOnboarded?: boolean
+  referralSource?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   sessions?: boolean | Prisma.User$sessionsArgs<ExtArgs>
@@ -1501,6 +1611,8 @@ export type UserSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: boolean
+  isOnboarded?: boolean
+  referralSource?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["user"]>
@@ -1514,6 +1626,8 @@ export type UserSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: boolean
+  isOnboarded?: boolean
+  referralSource?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["user"]>
@@ -1527,11 +1641,13 @@ export type UserSelectScalar = {
   isAlpha?: boolean
   isDisabled?: boolean
   disabledAt?: boolean
+  isOnboarded?: boolean
+  referralSource?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type UserOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "email" | "emailVerified" | "image" | "isAlpha" | "isDisabled" | "disabledAt" | "createdAt" | "updatedAt", ExtArgs["result"]["user"]>
+export type UserOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "email" | "emailVerified" | "image" | "isAlpha" | "isDisabled" | "disabledAt" | "isOnboarded" | "referralSource" | "createdAt" | "updatedAt", ExtArgs["result"]["user"]>
 export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   sessions?: boolean | Prisma.User$sessionsArgs<ExtArgs>
   accounts?: boolean | Prisma.User$accountsArgs<ExtArgs>
@@ -1567,6 +1683,8 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     isAlpha: boolean
     isDisabled: boolean
     disabledAt: Date | null
+    isOnboarded: boolean
+    referralSource: string | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["user"]>
@@ -2008,6 +2126,8 @@ export interface UserFieldRefs {
   readonly isAlpha: Prisma.FieldRef<"User", 'Boolean'>
   readonly isDisabled: Prisma.FieldRef<"User", 'Boolean'>
   readonly disabledAt: Prisma.FieldRef<"User", 'DateTime'>
+  readonly isOnboarded: Prisma.FieldRef<"User", 'Boolean'>
+  readonly referralSource: Prisma.FieldRef<"User", 'String'>
   readonly createdAt: Prisma.FieldRef<"User", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"User", 'DateTime'>
 }

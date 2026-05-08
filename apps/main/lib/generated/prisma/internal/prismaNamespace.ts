@@ -1876,6 +1876,8 @@ export const UserScalarFieldEnum = {
   isAlpha: 'isAlpha',
   isDisabled: 'isDisabled',
   disabledAt: 'disabledAt',
+  isOnboarded: 'isOnboarded',
+  referralSource: 'referralSource',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

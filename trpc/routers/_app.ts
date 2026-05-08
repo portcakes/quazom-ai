@@ -937,6 +937,31 @@ export const appRouter = createTRPCRouter({
       });
       return { ok: true };
     }),
+  // Mark the user onboarded. Called by the final step of /onboarding for
+  // both submit-survey and skip-survey paths. The optional `referralSource`
+  // is the answer to "how did you hear about Quazom?"; we only persist it
+  // when present so a skip leaves the field NULL.
+  completeOnboarding: activeUserProcedure
+    .input(
+      z.object({
+        referralSource: z
+          .string()
+          .trim()
+          .min(1)
+          .max(120)
+          .optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await prisma.user.update({
+        where: { id: ctx.userId },
+        data: {
+          isOnboarded: true,
+          ...(input.referralSource ? { referralSource: input.referralSource } : {}),
+        },
+      });
+      return { ok: true };
+    }),
   enableAccount: protectedcProcedure.mutation(async ({ ctx }) => {
     await prisma.user.update({
       where: { id: ctx.userId },
