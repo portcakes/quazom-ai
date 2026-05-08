@@ -116,3 +116,18 @@ export type Note = Prisma.NoteModel
  * 
  */
 export type UserEvaluations = Prisma.UserEvaluationsModel
+/**
+ * Model StudySchedule
+ * 
+ */
+export type StudySchedule = Prisma.StudyScheduleModel
+/**
+ * Model StudySession
+ * 
+ */
+export type StudySession = Prisma.StudySessionModel
+/**
+ * Model CheckIn
+ * 
+ */
+export type CheckIn = Prisma.CheckInModel

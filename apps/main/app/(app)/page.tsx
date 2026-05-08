@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/auth-utils";
-import { NotesGrid } from "@/components/features/notes/notes-grid";
+import { NotesWidget } from "@/components/features/notes/notes-widget";
+import { ScheduleWidget } from "@/components/features/schedule/schedule-widget";
 
 export default async function Home() {
   const session = await requireAuth();
@@ -13,17 +14,16 @@ export default async function Home() {
             Welcome back, {firstName}
           </h1>
           <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Capture quick thoughts on what you&apos;re studying. Notes you take
-            here are unattached to any curriculum and live in your Notes page.
+            Track today&apos;s study sessions, build a streak, and capture
+            anything on your mind.
           </p>
         </div>
       </section>
       <section className="mx-auto w-full max-w-5xl px-6 py-8">
-        <NotesGrid
-          scope="user"
-          emptyTitle="Nothing here yet"
-          emptyDescription="Use this space for free-form thoughts about your studies — anything not tied to a specific curriculum."
-        />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <ScheduleWidget />
+          <NotesWidget />
+        </div>
       </section>
     </div>
   );

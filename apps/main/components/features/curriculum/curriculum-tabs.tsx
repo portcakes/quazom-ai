@@ -11,6 +11,7 @@ import { ModulesTab } from "./modules-tab";
 import { ResourcesTab } from "./resources-tab";
 import { OptionsTab } from "./options-tab";
 import { CurriculumNotesTab } from "./notes-tab";
+import { StudyScheduleTab } from "./study-schedule-tab";
 
 type Props = {
   id: string;
@@ -42,6 +43,7 @@ export function CurriculumTabs({
             <TabsTrigger value="modules" className="cursor-pointer">Modules</TabsTrigger>
             <TabsTrigger value="resources" className="cursor-pointer">Resources</TabsTrigger>
             <TabsTrigger value="notes" className="cursor-pointer">Notes</TabsTrigger>
+            <TabsTrigger value="schedule" className="cursor-pointer">Study Schedule</TabsTrigger>
             <TabsTrigger value="options" className="cursor-pointer">Options</TabsTrigger>
           </TabsList>
         </div>
@@ -56,6 +58,9 @@ export function CurriculumTabs({
         </TabsContent>
         <TabsContent value="notes" className="mt-6">
           <CurriculumNotesTab curriculumId={id} />
+        </TabsContent>
+        <TabsContent value="schedule" className="mt-6">
+          <StudyScheduleTab curriculumId={id} curriculumTitle={title} />
         </TabsContent>
         <TabsContent value="options" className="mt-6">
           <OptionsTab id={id} title={title} isHidden={isHidden} />

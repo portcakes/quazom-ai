@@ -65,7 +65,10 @@ export const ModelName = {
   Discussion: 'Discussion',
   Readings: 'Readings',
   Note: 'Note',
-  UserEvaluations: 'UserEvaluations'
+  UserEvaluations: 'UserEvaluations',
+  StudySchedule: 'StudySchedule',
+  StudySession: 'StudySession',
+  CheckIn: 'CheckIn'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -329,6 +332,50 @@ export const UserEvaluationsScalarFieldEnum = {
 } as const
 
 export type UserEvaluationsScalarFieldEnum = (typeof UserEvaluationsScalarFieldEnum)[keyof typeof UserEvaluationsScalarFieldEnum]
+
+
+export const StudyScheduleScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  curriculumId: 'curriculumId',
+  daysOfWeek: 'daysOfWeek',
+  minutesPerDay: 'minutesPerDay',
+  targetCompletionDate: 'targetCompletionDate',
+  preferredTimeSlots: 'preferredTimeSlots',
+  startDate: 'startDate',
+  warningsAccepted: 'warningsAccepted',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type StudyScheduleScalarFieldEnum = (typeof StudyScheduleScalarFieldEnum)[keyof typeof StudyScheduleScalarFieldEnum]
+
+
+export const StudySessionScalarFieldEnum = {
+  id: 'id',
+  scheduleId: 'scheduleId',
+  userId: 'userId',
+  date: 'date',
+  timeSlot: 'timeSlot',
+  durationMin: 'durationMin',
+  lessonIds: 'lessonIds',
+  lessonTitles: 'lessonTitles',
+  isCompleted: 'isCompleted',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type StudySessionScalarFieldEnum = (typeof StudySessionScalarFieldEnum)[keyof typeof StudySessionScalarFieldEnum]
+
+
+export const CheckInScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  date: 'date',
+  createdAt: 'createdAt'
+} as const
+
+export type CheckInScalarFieldEnum = (typeof CheckInScalarFieldEnum)[keyof typeof CheckInScalarFieldEnum]
 
 
 export const SortOrder = {

@@ -6,6 +6,19 @@ import { userChannel, userChannelTopics } from '@/inngest/channels';
 import { getSubscriptionToken } from 'inngest/realtime';
 import prisma from '@/lib/db';
 import { NOTE_MAX_LENGTH, type QuizQuestion } from '@/inngest/schemas';
+import {
+  generateSchedule,
+  normalizeDateFromDb,
+  startOfLocalDay,
+  type LessonForScheduling,
+} from '@/lib/schedule/generator';
+import {
+  STUDY_TIME_SLOTS,
+  isDayOfWeek,
+  type StudyTimeSlot as StudyTimeSlotConst,
+} from '@/lib/schedule/time-slots';
+import { computeStreak } from '@/lib/schedule/streak';
+import type { StudyTimeSlot as PrismaStudyTimeSlot } from '@/lib/generated/prisma/enums';
 
 // Shared note input — title is optional, content is required, both length-capped
 // so a runaway client can't blow up the table.
@@ -13,6 +26,23 @@ const noteInputBase = z.object({
   title: z.string().max(120).optional(),
   content: z.string().min(1, 'Content is required').max(NOTE_MAX_LENGTH),
 });
+
+// Shared schedule input. Used by both `previewSchedule` and `upsertSchedule`.
+const scheduleInputSchema = z.object({
+  curriculumId: z.string(),
+  daysOfWeek: z
+    .array(z.number().int().min(0).max(6))
+    .min(1, 'Pick at least one day per week')
+    .max(7),
+  minutesPerDay: z.number().int().min(10).max(480),
+  targetCompletionDate: z.iso.datetime(),
+  preferredTimeSlots: z
+    .array(z.enum(STUDY_TIME_SLOTS))
+    .min(1, 'Pick at least one preferred study time')
+    .max(4),
+});
+
+type ScheduleInput = z.infer<typeof scheduleInputSchema>;
 
 export const appRouter = createTRPCRouter({
   hello: baseProcedure
@@ -504,6 +534,208 @@ export const appRouter = createTRPCRouter({
       }));
     }),
 
+  // ---------------------------------------------------------------------
+  // Study schedule
+  // ---------------------------------------------------------------------
+  previewSchedule: protectedcProcedure
+    .input(scheduleInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      // `mutation` (not query) so the caller can re-trigger it freely from a
+      // preview button without TanStack Query refetch shenanigans.
+      const result = await buildPreview(ctx.userId, input);
+      return result;
+    }),
+  upsertSchedule: protectedcProcedure
+    .input(
+      scheduleInputSchema.extend({
+        acceptWarnings: z.boolean().default(false),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const preview = await buildPreview(ctx.userId, input);
+      // If the generator surfaced any warning, the client must explicitly
+      // opt in to proceed. This is the "your end date is too soon" gate.
+      if (preview.diagnostics.warnings.length > 0 && !input.acceptWarnings) {
+        return {
+          ok: false as const,
+          requiresConfirmation: true as const,
+          diagnostics: preview.diagnostics,
+          summary: preview.summary,
+        };
+      }
+
+      // Replace the existing schedule for this curriculum atomically: delete
+      // any existing sessions + schedule, then write the new one. We rebuild
+      // the slot conflict map AFTER the delete so we don't conflict with
+      // ourselves on a regenerate.
+      await prisma.$transaction(async (tx) => {
+        await tx.studySchedule.deleteMany({
+          where: { curriculumId: input.curriculumId, userId: ctx.userId },
+        });
+
+        const scheduleId = crypto.randomUUID();
+        const startDate = startOfLocalDay(new Date());
+        const targetDate = startOfLocalDay(new Date(input.targetCompletionDate));
+
+        await tx.studySchedule.create({
+          data: {
+            id: scheduleId,
+            userId: ctx.userId,
+            curriculumId: input.curriculumId,
+            daysOfWeek: input.daysOfWeek,
+            minutesPerDay: input.minutesPerDay,
+            preferredTimeSlots: input.preferredTimeSlots as PrismaStudyTimeSlot[],
+            startDate,
+            targetCompletionDate: targetDate,
+            warningsAccepted: input.acceptWarnings,
+          },
+        });
+
+        if (preview.sessions.length > 0) {
+          await tx.studySession.createMany({
+            data: preview.sessions.map((s) => ({
+              id: crypto.randomUUID(),
+              scheduleId,
+              userId: ctx.userId,
+              date: s.date,
+              timeSlot: s.timeSlot as PrismaStudyTimeSlot,
+              durationMin: s.durationMin,
+              lessonIds: s.lessons.map((l) => l.id),
+              lessonTitles: s.lessons.map((l) => l.title),
+            })),
+          });
+        }
+      });
+
+      return {
+        ok: true as const,
+        requiresConfirmation: false as const,
+        diagnostics: preview.diagnostics,
+        summary: preview.summary,
+      };
+    }),
+  deleteSchedule: protectedcProcedure
+    .input(z.object({ curriculumId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await prisma.studySchedule.deleteMany({
+        where: { curriculumId: input.curriculumId, userId: ctx.userId },
+      });
+      return { deleted: result.count };
+    }),
+  listSchedules: protectedcProcedure.query(async ({ ctx }) => {
+    const rows = await prisma.studySchedule.findMany({
+      where: { userId: ctx.userId },
+      include: {
+        curriculum: { select: { id: true, title: true } },
+        _count: { select: { sessions: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((s) => ({
+      id: s.id,
+      curriculumId: s.curriculumId,
+      curriculumTitle: s.curriculum.title,
+      daysOfWeek: s.daysOfWeek,
+      minutesPerDay: s.minutesPerDay,
+      preferredTimeSlots: s.preferredTimeSlots,
+      // startDate / targetCompletionDate are TIMESTAMP columns and round
+      // trip exactly; no normalisation needed.
+      startDate: s.startDate,
+      targetCompletionDate: s.targetCompletionDate,
+      warningsAccepted: s.warningsAccepted,
+      sessionCount: s._count.sessions,
+    }));
+  }),
+  sessionsInRange: protectedcProcedure
+    .input(
+      z.object({
+        from: z.iso.datetime(),
+        to: z.iso.datetime(),
+        curriculumId: z.string().optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const rows = await prisma.studySession.findMany({
+        where: {
+          userId: ctx.userId,
+          date: {
+            gte: new Date(input.from),
+            lt: new Date(input.to),
+          },
+          ...(input.curriculumId
+            ? { schedule: { curriculumId: input.curriculumId } }
+            : {}),
+        },
+        orderBy: [{ date: 'asc' }, { timeSlot: 'asc' }],
+        include: {
+          schedule: {
+            select: {
+              curriculumId: true,
+              curriculum: { select: { title: true } },
+            },
+          },
+        },
+      });
+      return rows.map((r) => ({
+        id: r.id,
+        scheduleId: r.scheduleId,
+        date: normalizeDateFromDb(r.date),
+        timeSlot: r.timeSlot,
+        durationMin: r.durationMin,
+        lessonIds: Array.isArray(r.lessonIds) ? (r.lessonIds as string[]) : [],
+        lessonTitles: Array.isArray(r.lessonTitles)
+          ? (r.lessonTitles as string[])
+          : [],
+        isCompleted: r.isCompleted,
+        curriculum: {
+          id: r.schedule.curriculumId,
+          title: r.schedule.curriculum.title,
+        },
+      }));
+    }),
+  checkIn: protectedcProcedure.mutation(async ({ ctx }) => {
+    const today = startOfLocalDay(new Date());
+
+    // Idempotent: upsert keyed on the user+date unique constraint so a
+    // double-click doesn't error out.
+    await prisma.checkIn.upsert({
+      where: { userId_date: { userId: ctx.userId, date: today } },
+      create: {
+        id: crypto.randomUUID(),
+        userId: ctx.userId,
+        date: today,
+      },
+      update: {},
+    });
+
+    // Mark every session scheduled for today as completed too — the user is
+    // checking in for the day, after all.
+    await prisma.studySession.updateMany({
+      where: { userId: ctx.userId, date: today },
+      data: { isCompleted: true },
+    });
+
+    return { ok: true };
+  }),
+  getStreak: protectedcProcedure.query(async ({ ctx }) => {
+    const checkIns = await prisma.checkIn.findMany({
+      where: { userId: ctx.userId },
+      orderBy: { date: 'desc' },
+      take: 365,
+      select: { date: true },
+    });
+    // Anchor each row to noon UTC so the streak compares against today
+    // (also noon UTC) on the user's local calendar day.
+    const summary = computeStreak(
+      checkIns.map((c) => normalizeDateFromDb(c.date)),
+    );
+    return {
+      streak: summary.streak,
+      checkedInToday: summary.checkedInToday,
+      lastCheckIn: summary.lastCheckIn,
+    };
+  }),
+
   realtimeToken: protectedcProcedure
     .output(
       z.object({
@@ -544,4 +776,100 @@ function scoreQuestions(
   }, 0);
   const score = Math.round((correct / questions.length) * 100);
   return { score, maxScore: 100, isPassed: score >= passScore };
+}
+
+async function buildPreview(userId: string, input: ScheduleInput) {
+  // Verify ownership of curriculum and load its lesson list in canonical
+  // order. We schedule every non-READY lesson too — the user can do them in
+  // any order; the schedule just paces the work.
+  const curriculum = await prisma.curriculum.findFirst({
+    where: { id: input.curriculumId, userId },
+    select: {
+      id: true,
+      title: true,
+      curriculumModules: {
+        orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+        select: {
+          id: true,
+          order: true,
+          lessons: {
+            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+            select: { id: true, title: true, duration: true, order: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!curriculum) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Curriculum not found' });
+  }
+
+  const flatLessons: LessonForScheduling[] = curriculum.curriculumModules.flatMap(
+    (m) =>
+      m.lessons.map((l, i) => ({
+        id: l.id,
+        title: l.title,
+        durationStr: l.duration,
+        // Compose a stable ordering key: module order × 1000 + lesson index.
+        globalOrder: m.order * 1000 + (l.order || i + 1),
+      })),
+  );
+
+  // Conflict map: any (date, slot) booked by *other* schedules of the same
+  // user inside the candidate range.
+  const startDate = startOfLocalDay(new Date());
+  const targetDate = startOfLocalDay(new Date(input.targetCompletionDate));
+
+  const conflictRows = await prisma.studySession.findMany({
+    where: {
+      userId,
+      date: { gte: startDate, lte: targetDate },
+      schedule: { curriculumId: { not: input.curriculumId } },
+    },
+    select: {
+      date: true,
+      timeSlot: true,
+      schedule: { select: { curriculum: { select: { title: true } } } },
+    },
+  });
+
+  const takenSlots = new Set(
+    conflictRows.map(
+      (r) =>
+        `${dateToDayKey(normalizeDateFromDb(r.date))}:${r.timeSlot}` as const,
+    ),
+  );
+
+  const blockingCurricula = Array.from(
+    new Set(conflictRows.map((r) => r.schedule.curriculum.title)),
+  );
+
+  const result = generateSchedule({
+    lessons: flatLessons,
+    daysOfWeek: input.daysOfWeek.filter(isDayOfWeek),
+    minutesPerDay: input.minutesPerDay,
+    preferredTimeSlots: input.preferredTimeSlots as StudyTimeSlotConst[],
+    startDate,
+    targetCompletionDate: targetDate,
+    takenSlots: takenSlots as Set<`${string}:${StudyTimeSlotConst}`>,
+  });
+
+  return {
+    sessions: result.sessions,
+    diagnostics: result.diagnostics,
+    summary: {
+      curriculumTitle: curriculum.title,
+      lessonCount: flatLessons.length,
+      sessionCount: result.sessions.length,
+      blockingCurricula,
+    },
+  };
+}
+
+function dateToDayKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }

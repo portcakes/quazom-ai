@@ -45,3 +45,13 @@ export const ProjectType = {
 } as const
 
 export type ProjectType = (typeof ProjectType)[keyof typeof ProjectType]
+
+
+export const StudyTimeSlot = {
+  MORNING: 'MORNING',
+  AFTERNOON: 'AFTERNOON',
+  EVENING: 'EVENING',
+  NIGHT: 'NIGHT'
+} as const
+
+export type StudyTimeSlot = (typeof StudyTimeSlot)[keyof typeof StudyTimeSlot]

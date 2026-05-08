@@ -26,6 +26,9 @@ model User {
   curricula       Curriculum[]
   userEvaluations UserEvaluations[]
   notes           Note[]
+  studySchedules  StudySchedule[]
+  studySessions   StudySession[]
+  checkIns        CheckIn[]
 
   @@unique([email])
   @@map("user")
@@ -80,7 +83,7 @@ model Verification {
 }
 
 model Curriculum {
-  id                   String   @id
+  id                   String         @id
   userId               String
   title                String
   subject              String
@@ -93,12 +96,13 @@ model Curriculum {
   recommendedResources Json
   raw_ai_response      String
   structured_data_json Json
-  isHidden             Boolean  @default(false)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isHidden             Boolean        @default(false)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   curriculumModules    Module[]
   notes                Note[]
+  studySchedule        StudySchedule?
 
   @@index([userId])
   @@map("curriculum")
@@ -165,6 +169,8 @@ model Lesson {
   discussions          Discussion[]
   readings             Readings[]
   notes                Note[]
+  // Sessions reference lessons indirectly through StudySession.lessonIds (Json),
+  // not a relational FK, so we don't list them here.
 
   @@index([moduleId])
   @@map("lesson")
@@ -341,4 +347,89 @@ model UserEvaluations {
 
   @@index([userId])
   @@map("user_evaluations")
+}
+
+// MORNING   = 08:00–12:00
+// AFTERNOON = 12:00–17:00
+// EVENING   = 17:00–21:00
+// NIGHT     = 21:00–24:00
+enum StudyTimeSlot {
+  MORNING
+  AFTERNOON
+  EVENING
+  NIGHT
+}
+
+// One active schedule per (user, curriculum). Editing replaces.
+model StudySchedule {
+  id                   String          @id
+  userId               String
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  curriculumId         String          @unique
+  curriculum           Curriculum      @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  // 0=Sunday … 6=Saturday. Indices into JS Date#getDay() so the UI doesn't
+  // need to translate.
+  daysOfWeek           Int[]
+  minutesPerDay        Int
+  targetCompletionDate DateTime
+  preferredTimeSlots   StudyTimeSlot[]
+  startDate            DateTime        @default(now())
+  // Whether the user accepted a "your end date is too soon" warning when
+  // creating this schedule. Surfaced on the schedule UI so the user remembers.
+  warningsAccepted     Boolean         @default(false)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  sessions             StudySession[]
+
+  @@index([userId])
+  @@map("study_schedule")
+}
+
+// One slot occupation per (userId, date, timeSlot). The unique constraint is
+// what enforces "no double-booking across curricula" at the DB level.
+//
+// `lessonIds` is an ordered array of Lesson ids packed into the slot.
+// `lessonOrders` mirrors `lessonIds` for sortable display in the UI without an
+// extra join.
+model StudySession {
+  id           String        @id
+  scheduleId   String
+  schedule     StudySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Stored as a Postgres DATE column so the unique constraint on
+  // (userId, date, timeSlot) operates on calendar days. The JS round-trip
+  // gives us UTC midnight; the queries layer re-anchors to noon UTC via
+  // `normalizeDateFromDb()` so calendar UI and comparisons display the
+  // correct local day.
+  date         DateTime      @db.Date
+  timeSlot     StudyTimeSlot
+  durationMin  Int
+  // Json arrays of strings — one per lesson packed into this slot.
+  lessonIds    Json
+  lessonTitles Json
+  isCompleted  Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([userId, date, timeSlot])
+  @@index([scheduleId])
+  @@index([userId, date])
+  @@map("study_session")
+}
+
+// Daily check-ins. Streak is derived from these rows (no denormalised counter
+// to keep in sync). Date is a day-precision value to make the unique
+// constraint enforce one check-in per calendar day.
+model CheckIn {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // See StudySession.date — DATE column for calendar-day uniqueness.
+  date      DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@map("check_in")
 }

@@ -11,13 +11,14 @@ import {
 import type { CurrentUser } from "@/lib/queries/user";
 import { UserMenu } from "./user-menu";
 import { CourseList } from "../course-list/course-list";
+import { CheckInButton } from "../schedule/check-in-button";
 
 type Props = {
   user: CurrentUser;
 };
 
 export default function AppSidebar({ user }: Props) {
-  
+
   const { isMobile, setOpenMobile } = useSidebar();
   const logoClick = () => {
     if (isMobile) {
@@ -39,6 +40,10 @@ export default function AppSidebar({ user }: Props) {
       <SidebarContent className="px-3 py-3">
         <CourseList />
       </SidebarContent>
+      <SidebarSeparator className="mx-0" />
+      {/* Check-in lives just above the user menu so the daily action is one
+          flick away from the bottom of the screen. */}
+      <CheckInButton />
       <SidebarSeparator className="mx-0" />
       <SidebarFooter className="p-0">
         <UserMenu

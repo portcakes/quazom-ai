@@ -203,6 +203,9 @@ export type UserWhereInput = {
   curricula?: Prisma.CurriculumListRelationFilter
   userEvaluations?: Prisma.UserEvaluationsListRelationFilter
   notes?: Prisma.NoteListRelationFilter
+  studySchedules?: Prisma.StudyScheduleListRelationFilter
+  studySessions?: Prisma.StudySessionListRelationFilter
+  checkIns?: Prisma.CheckInListRelationFilter
 }
 
 export type UserOrderByWithRelationInput = {
@@ -218,6 +221,9 @@ export type UserOrderByWithRelationInput = {
   curricula?: Prisma.CurriculumOrderByRelationAggregateInput
   userEvaluations?: Prisma.UserEvaluationsOrderByRelationAggregateInput
   notes?: Prisma.NoteOrderByRelationAggregateInput
+  studySchedules?: Prisma.StudyScheduleOrderByRelationAggregateInput
+  studySessions?: Prisma.StudySessionOrderByRelationAggregateInput
+  checkIns?: Prisma.CheckInOrderByRelationAggregateInput
 }
 
 export type UserWhereUniqueInput = Prisma.AtLeast<{
@@ -236,6 +242,9 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   curricula?: Prisma.CurriculumListRelationFilter
   userEvaluations?: Prisma.UserEvaluationsListRelationFilter
   notes?: Prisma.NoteListRelationFilter
+  studySchedules?: Prisma.StudyScheduleListRelationFilter
+  studySessions?: Prisma.StudySessionListRelationFilter
+  checkIns?: Prisma.CheckInListRelationFilter
 }, "id" | "email">
 
 export type UserOrderByWithAggregationInput = {
@@ -277,6 +286,9 @@ export type UserCreateInput = {
   curricula?: Prisma.CurriculumCreateNestedManyWithoutUserInput
   userEvaluations?: Prisma.UserEvaluationsCreateNestedManyWithoutUserInput
   notes?: Prisma.NoteCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateInput = {
@@ -292,6 +304,9 @@ export type UserUncheckedCreateInput = {
   curricula?: Prisma.CurriculumUncheckedCreateNestedManyWithoutUserInput
   userEvaluations?: Prisma.UserEvaluationsUncheckedCreateNestedManyWithoutUserInput
   notes?: Prisma.NoteUncheckedCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleUncheckedCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionUncheckedCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserUpdateInput = {
@@ -307,6 +322,9 @@ export type UserUpdateInput = {
   curricula?: Prisma.CurriculumUpdateManyWithoutUserNestedInput
   userEvaluations?: Prisma.UserEvaluationsUpdateManyWithoutUserNestedInput
   notes?: Prisma.NoteUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateInput = {
@@ -322,6 +340,9 @@ export type UserUncheckedUpdateInput = {
   curricula?: Prisma.CurriculumUncheckedUpdateManyWithoutUserNestedInput
   userEvaluations?: Prisma.UserEvaluationsUncheckedUpdateManyWithoutUserNestedInput
   notes?: Prisma.NoteUncheckedUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUncheckedUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUncheckedUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateManyInput = {
@@ -475,6 +496,48 @@ export type UserUpdateOneRequiredWithoutUserEvaluationsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutUserEvaluationsInput, Prisma.UserUpdateWithoutUserEvaluationsInput>, Prisma.UserUncheckedUpdateWithoutUserEvaluationsInput>
 }
 
+export type UserCreateNestedOneWithoutStudySchedulesInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutStudySchedulesInput, Prisma.UserUncheckedCreateWithoutStudySchedulesInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutStudySchedulesInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutStudySchedulesNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutStudySchedulesInput, Prisma.UserUncheckedCreateWithoutStudySchedulesInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutStudySchedulesInput
+  upsert?: Prisma.UserUpsertWithoutStudySchedulesInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutStudySchedulesInput, Prisma.UserUpdateWithoutStudySchedulesInput>, Prisma.UserUncheckedUpdateWithoutStudySchedulesInput>
+}
+
+export type UserCreateNestedOneWithoutStudySessionsInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutStudySessionsInput, Prisma.UserUncheckedCreateWithoutStudySessionsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutStudySessionsInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutStudySessionsNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutStudySessionsInput, Prisma.UserUncheckedCreateWithoutStudySessionsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutStudySessionsInput
+  upsert?: Prisma.UserUpsertWithoutStudySessionsInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutStudySessionsInput, Prisma.UserUpdateWithoutStudySessionsInput>, Prisma.UserUncheckedUpdateWithoutStudySessionsInput>
+}
+
+export type UserCreateNestedOneWithoutCheckInsInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutCheckInsInput, Prisma.UserUncheckedCreateWithoutCheckInsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutCheckInsInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutCheckInsNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutCheckInsInput, Prisma.UserUncheckedCreateWithoutCheckInsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutCheckInsInput
+  upsert?: Prisma.UserUpsertWithoutCheckInsInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutCheckInsInput, Prisma.UserUpdateWithoutCheckInsInput>, Prisma.UserUncheckedUpdateWithoutCheckInsInput>
+}
+
 export type UserCreateWithoutSessionsInput = {
   id: string
   name: string
@@ -487,6 +550,9 @@ export type UserCreateWithoutSessionsInput = {
   curricula?: Prisma.CurriculumCreateNestedManyWithoutUserInput
   userEvaluations?: Prisma.UserEvaluationsCreateNestedManyWithoutUserInput
   notes?: Prisma.NoteCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutSessionsInput = {
@@ -501,6 +567,9 @@ export type UserUncheckedCreateWithoutSessionsInput = {
   curricula?: Prisma.CurriculumUncheckedCreateNestedManyWithoutUserInput
   userEvaluations?: Prisma.UserEvaluationsUncheckedCreateNestedManyWithoutUserInput
   notes?: Prisma.NoteUncheckedCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleUncheckedCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionUncheckedCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutSessionsInput = {
@@ -531,6 +600,9 @@ export type UserUpdateWithoutSessionsInput = {
   curricula?: Prisma.CurriculumUpdateManyWithoutUserNestedInput
   userEvaluations?: Prisma.UserEvaluationsUpdateManyWithoutUserNestedInput
   notes?: Prisma.NoteUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutSessionsInput = {
@@ -545,6 +617,9 @@ export type UserUncheckedUpdateWithoutSessionsInput = {
   curricula?: Prisma.CurriculumUncheckedUpdateManyWithoutUserNestedInput
   userEvaluations?: Prisma.UserEvaluationsUncheckedUpdateManyWithoutUserNestedInput
   notes?: Prisma.NoteUncheckedUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUncheckedUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUncheckedUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateWithoutAccountsInput = {
@@ -559,6 +634,9 @@ export type UserCreateWithoutAccountsInput = {
   curricula?: Prisma.CurriculumCreateNestedManyWithoutUserInput
   userEvaluations?: Prisma.UserEvaluationsCreateNestedManyWithoutUserInput
   notes?: Prisma.NoteCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutAccountsInput = {
@@ -573,6 +651,9 @@ export type UserUncheckedCreateWithoutAccountsInput = {
   curricula?: Prisma.CurriculumUncheckedCreateNestedManyWithoutUserInput
   userEvaluations?: Prisma.UserEvaluationsUncheckedCreateNestedManyWithoutUserInput
   notes?: Prisma.NoteUncheckedCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleUncheckedCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionUncheckedCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutAccountsInput = {
@@ -603,6 +684,9 @@ export type UserUpdateWithoutAccountsInput = {
   curricula?: Prisma.CurriculumUpdateManyWithoutUserNestedInput
   userEvaluations?: Prisma.UserEvaluationsUpdateManyWithoutUserNestedInput
   notes?: Prisma.NoteUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutAccountsInput = {
@@ -617,6 +701,9 @@ export type UserUncheckedUpdateWithoutAccountsInput = {
   curricula?: Prisma.CurriculumUncheckedUpdateManyWithoutUserNestedInput
   userEvaluations?: Prisma.UserEvaluationsUncheckedUpdateManyWithoutUserNestedInput
   notes?: Prisma.NoteUncheckedUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUncheckedUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUncheckedUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateWithoutCurriculaInput = {
@@ -631,6 +718,9 @@ export type UserCreateWithoutCurriculaInput = {
   accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
   userEvaluations?: Prisma.UserEvaluationsCreateNestedManyWithoutUserInput
   notes?: Prisma.NoteCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutCurriculaInput = {
@@ -645,6 +735,9 @@ export type UserUncheckedCreateWithoutCurriculaInput = {
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
   userEvaluations?: Prisma.UserEvaluationsUncheckedCreateNestedManyWithoutUserInput
   notes?: Prisma.NoteUncheckedCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleUncheckedCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionUncheckedCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutCurriculaInput = {
@@ -675,6 +768,9 @@ export type UserUpdateWithoutCurriculaInput = {
   accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
   userEvaluations?: Prisma.UserEvaluationsUpdateManyWithoutUserNestedInput
   notes?: Prisma.NoteUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutCurriculaInput = {
@@ -689,6 +785,9 @@ export type UserUncheckedUpdateWithoutCurriculaInput = {
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
   userEvaluations?: Prisma.UserEvaluationsUncheckedUpdateManyWithoutUserNestedInput
   notes?: Prisma.NoteUncheckedUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUncheckedUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUncheckedUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateWithoutNotesInput = {
@@ -703,6 +802,9 @@ export type UserCreateWithoutNotesInput = {
   accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
   curricula?: Prisma.CurriculumCreateNestedManyWithoutUserInput
   userEvaluations?: Prisma.UserEvaluationsCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutNotesInput = {
@@ -717,6 +819,9 @@ export type UserUncheckedCreateWithoutNotesInput = {
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
   curricula?: Prisma.CurriculumUncheckedCreateNestedManyWithoutUserInput
   userEvaluations?: Prisma.UserEvaluationsUncheckedCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleUncheckedCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionUncheckedCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutNotesInput = {
@@ -747,6 +852,9 @@ export type UserUpdateWithoutNotesInput = {
   accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
   curricula?: Prisma.CurriculumUpdateManyWithoutUserNestedInput
   userEvaluations?: Prisma.UserEvaluationsUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutNotesInput = {
@@ -761,6 +869,9 @@ export type UserUncheckedUpdateWithoutNotesInput = {
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
   curricula?: Prisma.CurriculumUncheckedUpdateManyWithoutUserNestedInput
   userEvaluations?: Prisma.UserEvaluationsUncheckedUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUncheckedUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUncheckedUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateWithoutUserEvaluationsInput = {
@@ -775,6 +886,9 @@ export type UserCreateWithoutUserEvaluationsInput = {
   accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
   curricula?: Prisma.CurriculumCreateNestedManyWithoutUserInput
   notes?: Prisma.NoteCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutUserEvaluationsInput = {
@@ -789,6 +903,9 @@ export type UserUncheckedCreateWithoutUserEvaluationsInput = {
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
   curricula?: Prisma.CurriculumUncheckedCreateNestedManyWithoutUserInput
   notes?: Prisma.NoteUncheckedCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleUncheckedCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionUncheckedCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutUserEvaluationsInput = {
@@ -819,6 +936,9 @@ export type UserUpdateWithoutUserEvaluationsInput = {
   accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
   curricula?: Prisma.CurriculumUpdateManyWithoutUserNestedInput
   notes?: Prisma.NoteUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutUserEvaluationsInput = {
@@ -833,6 +953,261 @@ export type UserUncheckedUpdateWithoutUserEvaluationsInput = {
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
   curricula?: Prisma.CurriculumUncheckedUpdateManyWithoutUserNestedInput
   notes?: Prisma.NoteUncheckedUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUncheckedUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUncheckedUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUncheckedUpdateManyWithoutUserNestedInput
+}
+
+export type UserCreateWithoutStudySchedulesInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
+  curricula?: Prisma.CurriculumCreateNestedManyWithoutUserInput
+  userEvaluations?: Prisma.UserEvaluationsCreateNestedManyWithoutUserInput
+  notes?: Prisma.NoteCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInCreateNestedManyWithoutUserInput
+}
+
+export type UserUncheckedCreateWithoutStudySchedulesInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
+  curricula?: Prisma.CurriculumUncheckedCreateNestedManyWithoutUserInput
+  userEvaluations?: Prisma.UserEvaluationsUncheckedCreateNestedManyWithoutUserInput
+  notes?: Prisma.NoteUncheckedCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionUncheckedCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type UserCreateOrConnectWithoutStudySchedulesInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutStudySchedulesInput, Prisma.UserUncheckedCreateWithoutStudySchedulesInput>
+}
+
+export type UserUpsertWithoutStudySchedulesInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutStudySchedulesInput, Prisma.UserUncheckedUpdateWithoutStudySchedulesInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutStudySchedulesInput, Prisma.UserUncheckedCreateWithoutStudySchedulesInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutStudySchedulesInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutStudySchedulesInput, Prisma.UserUncheckedUpdateWithoutStudySchedulesInput>
+}
+
+export type UserUpdateWithoutStudySchedulesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
+  curricula?: Prisma.CurriculumUpdateManyWithoutUserNestedInput
+  userEvaluations?: Prisma.UserEvaluationsUpdateManyWithoutUserNestedInput
+  notes?: Prisma.NoteUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUpdateManyWithoutUserNestedInput
+}
+
+export type UserUncheckedUpdateWithoutStudySchedulesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
+  curricula?: Prisma.CurriculumUncheckedUpdateManyWithoutUserNestedInput
+  userEvaluations?: Prisma.UserEvaluationsUncheckedUpdateManyWithoutUserNestedInput
+  notes?: Prisma.NoteUncheckedUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUncheckedUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUncheckedUpdateManyWithoutUserNestedInput
+}
+
+export type UserCreateWithoutStudySessionsInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
+  curricula?: Prisma.CurriculumCreateNestedManyWithoutUserInput
+  userEvaluations?: Prisma.UserEvaluationsCreateNestedManyWithoutUserInput
+  notes?: Prisma.NoteCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInCreateNestedManyWithoutUserInput
+}
+
+export type UserUncheckedCreateWithoutStudySessionsInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
+  curricula?: Prisma.CurriculumUncheckedCreateNestedManyWithoutUserInput
+  userEvaluations?: Prisma.UserEvaluationsUncheckedCreateNestedManyWithoutUserInput
+  notes?: Prisma.NoteUncheckedCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleUncheckedCreateNestedManyWithoutUserInput
+  checkIns?: Prisma.CheckInUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type UserCreateOrConnectWithoutStudySessionsInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutStudySessionsInput, Prisma.UserUncheckedCreateWithoutStudySessionsInput>
+}
+
+export type UserUpsertWithoutStudySessionsInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutStudySessionsInput, Prisma.UserUncheckedUpdateWithoutStudySessionsInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutStudySessionsInput, Prisma.UserUncheckedCreateWithoutStudySessionsInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutStudySessionsInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutStudySessionsInput, Prisma.UserUncheckedUpdateWithoutStudySessionsInput>
+}
+
+export type UserUpdateWithoutStudySessionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
+  curricula?: Prisma.CurriculumUpdateManyWithoutUserNestedInput
+  userEvaluations?: Prisma.UserEvaluationsUpdateManyWithoutUserNestedInput
+  notes?: Prisma.NoteUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUpdateManyWithoutUserNestedInput
+}
+
+export type UserUncheckedUpdateWithoutStudySessionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
+  curricula?: Prisma.CurriculumUncheckedUpdateManyWithoutUserNestedInput
+  userEvaluations?: Prisma.UserEvaluationsUncheckedUpdateManyWithoutUserNestedInput
+  notes?: Prisma.NoteUncheckedUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUncheckedUpdateManyWithoutUserNestedInput
+  checkIns?: Prisma.CheckInUncheckedUpdateManyWithoutUserNestedInput
+}
+
+export type UserCreateWithoutCheckInsInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
+  curricula?: Prisma.CurriculumCreateNestedManyWithoutUserInput
+  userEvaluations?: Prisma.UserEvaluationsCreateNestedManyWithoutUserInput
+  notes?: Prisma.NoteCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionCreateNestedManyWithoutUserInput
+}
+
+export type UserUncheckedCreateWithoutCheckInsInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
+  curricula?: Prisma.CurriculumUncheckedCreateNestedManyWithoutUserInput
+  userEvaluations?: Prisma.UserEvaluationsUncheckedCreateNestedManyWithoutUserInput
+  notes?: Prisma.NoteUncheckedCreateNestedManyWithoutUserInput
+  studySchedules?: Prisma.StudyScheduleUncheckedCreateNestedManyWithoutUserInput
+  studySessions?: Prisma.StudySessionUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type UserCreateOrConnectWithoutCheckInsInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutCheckInsInput, Prisma.UserUncheckedCreateWithoutCheckInsInput>
+}
+
+export type UserUpsertWithoutCheckInsInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutCheckInsInput, Prisma.UserUncheckedUpdateWithoutCheckInsInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutCheckInsInput, Prisma.UserUncheckedCreateWithoutCheckInsInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutCheckInsInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutCheckInsInput, Prisma.UserUncheckedUpdateWithoutCheckInsInput>
+}
+
+export type UserUpdateWithoutCheckInsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
+  curricula?: Prisma.CurriculumUpdateManyWithoutUserNestedInput
+  userEvaluations?: Prisma.UserEvaluationsUpdateManyWithoutUserNestedInput
+  notes?: Prisma.NoteUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUpdateManyWithoutUserNestedInput
+}
+
+export type UserUncheckedUpdateWithoutCheckInsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
+  curricula?: Prisma.CurriculumUncheckedUpdateManyWithoutUserNestedInput
+  userEvaluations?: Prisma.UserEvaluationsUncheckedUpdateManyWithoutUserNestedInput
+  notes?: Prisma.NoteUncheckedUpdateManyWithoutUserNestedInput
+  studySchedules?: Prisma.StudyScheduleUncheckedUpdateManyWithoutUserNestedInput
+  studySessions?: Prisma.StudySessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 
@@ -846,6 +1221,9 @@ export type UserCountOutputType = {
   curricula: number
   userEvaluations: number
   notes: number
+  studySchedules: number
+  studySessions: number
+  checkIns: number
 }
 
 export type UserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -854,6 +1232,9 @@ export type UserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.I
   curricula?: boolean | UserCountOutputTypeCountCurriculaArgs
   userEvaluations?: boolean | UserCountOutputTypeCountUserEvaluationsArgs
   notes?: boolean | UserCountOutputTypeCountNotesArgs
+  studySchedules?: boolean | UserCountOutputTypeCountStudySchedulesArgs
+  studySessions?: boolean | UserCountOutputTypeCountStudySessionsArgs
+  checkIns?: boolean | UserCountOutputTypeCountCheckInsArgs
 }
 
 /**
@@ -901,6 +1282,27 @@ export type UserCountOutputTypeCountNotesArgs<ExtArgs extends runtime.Types.Exte
   where?: Prisma.NoteWhereInput
 }
 
+/**
+ * UserCountOutputType without action
+ */
+export type UserCountOutputTypeCountStudySchedulesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.StudyScheduleWhereInput
+}
+
+/**
+ * UserCountOutputType without action
+ */
+export type UserCountOutputTypeCountStudySessionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.StudySessionWhereInput
+}
+
+/**
+ * UserCountOutputType without action
+ */
+export type UserCountOutputTypeCountCheckInsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.CheckInWhereInput
+}
+
 
 export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -915,6 +1317,9 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   curricula?: boolean | Prisma.User$curriculaArgs<ExtArgs>
   userEvaluations?: boolean | Prisma.User$userEvaluationsArgs<ExtArgs>
   notes?: boolean | Prisma.User$notesArgs<ExtArgs>
+  studySchedules?: boolean | Prisma.User$studySchedulesArgs<ExtArgs>
+  studySessions?: boolean | Prisma.User$studySessionsArgs<ExtArgs>
+  checkIns?: boolean | Prisma.User$checkInsArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
 
@@ -955,6 +1360,9 @@ export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   curricula?: boolean | Prisma.User$curriculaArgs<ExtArgs>
   userEvaluations?: boolean | Prisma.User$userEvaluationsArgs<ExtArgs>
   notes?: boolean | Prisma.User$notesArgs<ExtArgs>
+  studySchedules?: boolean | Prisma.User$studySchedulesArgs<ExtArgs>
+  studySessions?: boolean | Prisma.User$studySessionsArgs<ExtArgs>
+  checkIns?: boolean | Prisma.User$checkInsArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type UserIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -968,6 +1376,9 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     curricula: Prisma.$CurriculumPayload<ExtArgs>[]
     userEvaluations: Prisma.$UserEvaluationsPayload<ExtArgs>[]
     notes: Prisma.$NotePayload<ExtArgs>[]
+    studySchedules: Prisma.$StudySchedulePayload<ExtArgs>[]
+    studySessions: Prisma.$StudySessionPayload<ExtArgs>[]
+    checkIns: Prisma.$CheckInPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1376,6 +1787,9 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
   curricula<T extends Prisma.User$curriculaArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$curriculaArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$CurriculumPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   userEvaluations<T extends Prisma.User$userEvaluationsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$userEvaluationsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$UserEvaluationsPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   notes<T extends Prisma.User$notesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$notesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$NotePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  studySchedules<T extends Prisma.User$studySchedulesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$studySchedulesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$StudySchedulePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  studySessions<T extends Prisma.User$studySessionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$studySessionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$StudySessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  checkIns<T extends Prisma.User$checkInsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$checkInsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$CheckInPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1922,6 +2336,78 @@ export type User$notesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs
   take?: number
   skip?: number
   distinct?: Prisma.NoteScalarFieldEnum | Prisma.NoteScalarFieldEnum[]
+}
+
+/**
+ * User.studySchedules
+ */
+export type User$studySchedulesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the StudySchedule
+   */
+  select?: Prisma.StudyScheduleSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the StudySchedule
+   */
+  omit?: Prisma.StudyScheduleOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.StudyScheduleInclude<ExtArgs> | null
+  where?: Prisma.StudyScheduleWhereInput
+  orderBy?: Prisma.StudyScheduleOrderByWithRelationInput | Prisma.StudyScheduleOrderByWithRelationInput[]
+  cursor?: Prisma.StudyScheduleWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.StudyScheduleScalarFieldEnum | Prisma.StudyScheduleScalarFieldEnum[]
+}
+
+/**
+ * User.studySessions
+ */
+export type User$studySessionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the StudySession
+   */
+  select?: Prisma.StudySessionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the StudySession
+   */
+  omit?: Prisma.StudySessionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.StudySessionInclude<ExtArgs> | null
+  where?: Prisma.StudySessionWhereInput
+  orderBy?: Prisma.StudySessionOrderByWithRelationInput | Prisma.StudySessionOrderByWithRelationInput[]
+  cursor?: Prisma.StudySessionWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.StudySessionScalarFieldEnum | Prisma.StudySessionScalarFieldEnum[]
+}
+
+/**
+ * User.checkIns
+ */
+export type User$checkInsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the CheckIn
+   */
+  select?: Prisma.CheckInSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the CheckIn
+   */
+  omit?: Prisma.CheckInOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.CheckInInclude<ExtArgs> | null
+  where?: Prisma.CheckInWhereInput
+  orderBy?: Prisma.CheckInOrderByWithRelationInput | Prisma.CheckInOrderByWithRelationInput[]
+  cursor?: Prisma.CheckInWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.CheckInScalarFieldEnum | Prisma.CheckInScalarFieldEnum[]
 }
 
 /**

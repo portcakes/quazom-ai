@@ -328,6 +328,23 @@ export type EnumProjectTypeWithAggregatesFilter<$PrismaModel = never> = {
   _max?: Prisma.NestedEnumProjectTypeFilter<$PrismaModel>
 }
 
+export type EnumStudyTimeSlotFilter<$PrismaModel = never> = {
+  equals?: $Enums.StudyTimeSlot | Prisma.EnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  in?: $Enums.StudyTimeSlot[] | Prisma.ListEnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  notIn?: $Enums.StudyTimeSlot[] | Prisma.ListEnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumStudyTimeSlotFilter<$PrismaModel> | $Enums.StudyTimeSlot
+}
+
+export type EnumStudyTimeSlotWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.StudyTimeSlot | Prisma.EnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  in?: $Enums.StudyTimeSlot[] | Prisma.ListEnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  notIn?: $Enums.StudyTimeSlot[] | Prisma.ListEnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumStudyTimeSlotWithAggregatesFilter<$PrismaModel> | $Enums.StudyTimeSlot
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumStudyTimeSlotFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumStudyTimeSlotFilter<$PrismaModel>
+}
+
 export type NestedStringFilter<$PrismaModel = never> = {
   equals?: string | Prisma.StringFieldRefInput<$PrismaModel>
   in?: string[] | Prisma.ListStringFieldRefInput<$PrismaModel>
@@ -599,6 +616,23 @@ export type NestedEnumProjectTypeWithAggregatesFilter<$PrismaModel = never> = {
   _count?: Prisma.NestedIntFilter<$PrismaModel>
   _min?: Prisma.NestedEnumProjectTypeFilter<$PrismaModel>
   _max?: Prisma.NestedEnumProjectTypeFilter<$PrismaModel>
+}
+
+export type NestedEnumStudyTimeSlotFilter<$PrismaModel = never> = {
+  equals?: $Enums.StudyTimeSlot | Prisma.EnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  in?: $Enums.StudyTimeSlot[] | Prisma.ListEnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  notIn?: $Enums.StudyTimeSlot[] | Prisma.ListEnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumStudyTimeSlotFilter<$PrismaModel> | $Enums.StudyTimeSlot
+}
+
+export type NestedEnumStudyTimeSlotWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.StudyTimeSlot | Prisma.EnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  in?: $Enums.StudyTimeSlot[] | Prisma.ListEnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  notIn?: $Enums.StudyTimeSlot[] | Prisma.ListEnumStudyTimeSlotFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumStudyTimeSlotWithAggregatesFilter<$PrismaModel> | $Enums.StudyTimeSlot
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumStudyTimeSlotFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumStudyTimeSlotFilter<$PrismaModel>
 }
 
 

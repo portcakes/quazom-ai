@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@quazom-ai/ui/components/ui/dropdown-menu";
 import {
+  CalendarIcon,
   ChevronUpIcon,
   LogOutIcon,
   SettingsIcon,
@@ -81,6 +82,12 @@ export function UserMenu({ firstName, fullName, avatarUrl }: UserMenuProps) {
           <Link href="/notes">
             <StickyNoteIcon />
             <span>Notes</span>
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild className="cursor-pointer">
+          <Link href="/schedule">
+            <CalendarIcon />
+            <span>Schedule</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild className="cursor-pointer">
