@@ -66,3 +66,58 @@ export type Verification = Prisma.VerificationModel
  * 
  */
 export type Curriculum = Prisma.CurriculumModel
+/**
+ * Model Module
+ * 
+ */
+export type Module = Prisma.ModuleModel
+/**
+ * Model Lesson
+ * 
+ */
+export type Lesson = Prisma.LessonModel
+/**
+ * Model Video
+ * 
+ */
+export type Video = Prisma.VideoModel
+/**
+ * Model Quiz
+ * 
+ */
+export type Quiz = Prisma.QuizModel
+/**
+ * Model Exercise
+ * 
+ */
+export type Exercise = Prisma.ExerciseModel
+/**
+ * Model Project
+ * 
+ */
+export type Project = Prisma.ProjectModel
+/**
+ * Model Discussion
+ * 
+ */
+export type Discussion = Prisma.DiscussionModel
+/**
+ * Model LessonNotes
+ * 
+ */
+export type LessonNotes = Prisma.LessonNotesModel
+/**
+ * Model QuizNotes
+ * 
+ */
+export type QuizNotes = Prisma.QuizNotesModel
+/**
+ * Model Notes
+ * 
+ */
+export type Notes = Prisma.NotesModel
+/**
+ * Model UserEvaluations
+ * 
+ */
+export type UserEvaluations = Prisma.UserEvaluationsModel

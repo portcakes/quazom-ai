@@ -9,7 +9,30 @@
 * 🟢 You can import this file directly.
 */
 
+export const LessonActivityType = {
+  VIDEO: 'VIDEO',
+  QUIZ: 'QUIZ',
+  EXERCISE: 'EXERCISE',
+  PROJECT: 'PROJECT',
+  DISCUSSION: 'DISCUSSION',
+  PRACTICE: 'PRACTICE',
+  READING: 'READING',
+  OTHER: 'OTHER'
+} as const
+
+export type LessonActivityType = (typeof LessonActivityType)[keyof typeof LessonActivityType]
 
 
-// This file is empty because there are no enums in the schema.
-export {}
+export const ProjectType = {
+  PRESENTATION: 'PRESENTATION',
+  REPORT: 'REPORT',
+  ARTICLE: 'ARTICLE',
+  ESSAY: 'ESSAY',
+  RESEARCH_PAPER: 'RESEARCH_PAPER',
+  THESIS: 'THESIS',
+  CODE_SNIPPET: 'CODE_SNIPPET',
+  CODE_PROJECT: 'CODE_PROJECT',
+  OTHER: 'OTHER'
+} as const
+
+export type ProjectType = (typeof ProjectType)[keyof typeof ProjectType]
