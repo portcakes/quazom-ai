@@ -63,9 +63,8 @@ export const ModelName = {
   Exercise: 'Exercise',
   Project: 'Project',
   Discussion: 'Discussion',
-  LessonNotes: 'LessonNotes',
-  QuizNotes: 'QuizNotes',
-  Notes: 'Notes',
+  Readings: 'Readings',
+  Note: 'Note',
   UserEvaluations: 'UserEvaluations'
 } as const
 
@@ -170,6 +169,7 @@ export const ModuleScalarFieldEnum = {
   curriculumId: 'curriculumId',
   title: 'title',
   summary: 'summary',
+  order: 'order',
   objectives: 'objectives',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
@@ -182,8 +182,11 @@ export const LessonScalarFieldEnum = {
   id: 'id',
   moduleId: 'moduleId',
   title: 'title',
+  description: 'description',
   summary: 'summary',
   activityType: 'activityType',
+  order: 'order',
+  status: 'status',
   content: 'content',
   duration: 'duration',
   objectives: 'objectives',
@@ -200,7 +203,9 @@ export const VideoScalarFieldEnum = {
   lessonId: 'lessonId',
   title: 'title',
   description: 'description',
+  overview: 'overview',
   embedUrl: 'embedUrl',
+  externalUrl: 'externalUrl',
   thumbnailUrl: 'thumbnailUrl',
   duration: 'duration',
   isCompleted: 'isCompleted',
@@ -216,8 +221,7 @@ export const QuizScalarFieldEnum = {
   lessonId: 'lessonId',
   title: 'title',
   questions: 'questions',
-  answers: 'answers',
-  correctAnswers: 'correctAnswers',
+  userAnswers: 'userAnswers',
   feedback: 'feedback',
   score: 'score',
   maxScore: 'maxScore',
@@ -236,9 +240,8 @@ export const ExerciseScalarFieldEnum = {
   lessonId: 'lessonId',
   title: 'title',
   description: 'description',
-  instructions: 'instructions',
+  questions: 'questions',
   hints: 'hints',
-  correctAnswers: 'correctAnswers',
   userAnswers: 'userAnswers',
   score: 'score',
   maxScore: 'maxScore',
@@ -261,8 +264,7 @@ export const ProjectScalarFieldEnum = {
   objectives: 'objectives',
   recommendedResources: 'recommendedResources',
   projectType: 'projectType',
-  projectUrl: 'projectUrl',
-  projectFileUrl: 'projectFileUrl',
+  submissionUrl: 'submissionUrl',
   isCompleted: 'isCompleted',
   feedback: 'feedback',
   createdAt: 'createdAt',
@@ -279,12 +281,8 @@ export const DiscussionScalarFieldEnum = {
   summary: 'summary',
   objectives: 'objectives',
   recommendedResources: 'recommendedResources',
-  aiResponses: 'aiResponses',
-  userResponses: 'userResponses',
   chatHistory: 'chatHistory',
-  chatSummary: 'chatSummary',
   isCompleted: 'isCompleted',
-  feedback: 'feedback',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -292,40 +290,34 @@ export const DiscussionScalarFieldEnum = {
 export type DiscussionScalarFieldEnum = (typeof DiscussionScalarFieldEnum)[keyof typeof DiscussionScalarFieldEnum]
 
 
-export const LessonNotesScalarFieldEnum = {
+export const ReadingsScalarFieldEnum = {
   id: 'id',
   lessonId: 'lessonId',
   title: 'title',
+  summary: 'summary',
+  overview: 'overview',
   content: 'content',
+  recommendedResources: 'recommendedResources',
+  isCompleted: 'isCompleted',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
-export type LessonNotesScalarFieldEnum = (typeof LessonNotesScalarFieldEnum)[keyof typeof LessonNotesScalarFieldEnum]
+export type ReadingsScalarFieldEnum = (typeof ReadingsScalarFieldEnum)[keyof typeof ReadingsScalarFieldEnum]
 
 
-export const QuizNotesScalarFieldEnum = {
-  id: 'id',
-  quizId: 'quizId',
-  title: 'title',
-  content: 'content',
-  createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
-} as const
-
-export type QuizNotesScalarFieldEnum = (typeof QuizNotesScalarFieldEnum)[keyof typeof QuizNotesScalarFieldEnum]
-
-
-export const NotesScalarFieldEnum = {
+export const NoteScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
+  lessonId: 'lessonId',
+  curriculumId: 'curriculumId',
   title: 'title',
   content: 'content',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
-export type NotesScalarFieldEnum = (typeof NotesScalarFieldEnum)[keyof typeof NotesScalarFieldEnum]
+export type NoteScalarFieldEnum = (typeof NoteScalarFieldEnum)[keyof typeof NoteScalarFieldEnum]
 
 
 export const UserEvaluationsScalarFieldEnum = {

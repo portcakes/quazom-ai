@@ -6,12 +6,14 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/db";
 import {
   curriculumObjectiveSchema,
-  curriculumModuleSchema,
   curriculumResourceSchema,
   type CurriculumObjective,
-  type CurriculumModule,
   type CurriculumResource,
 } from "@/inngest/schemas";
+import {
+  getCurriculumModulesWithLessons,
+  type CurriculumModuleWithLessons,
+} from "./lesson";
 
 export type CurriculumDetail = {
   id: string;
@@ -23,7 +25,7 @@ export type CurriculumDetail = {
   estimatedDuration: string;
   isHidden: boolean;
   objectives: CurriculumObjective[];
-  modules: CurriculumModule[];
+  modules: CurriculumModuleWithLessons[];
   recommendedResources: CurriculumResource[];
 };
 
@@ -45,15 +47,14 @@ export async function getCurriculumById(
       estimatedDuration: true,
       isHidden: true,
       objectives: true,
-      modules: true,
       recommendedResources: true,
     },
   });
 
   if (!curriculum) return null;
 
-  // The JSON columns came from the LLM at write time, but parse defensively
-  // here so the page can rely on the typed shape.
+  const modules = await getCurriculumModulesWithLessons(curriculum.id);
+
   return {
     id: curriculum.id,
     title: curriculum.title,
@@ -64,7 +65,7 @@ export async function getCurriculumById(
     estimatedDuration: curriculum.estimatedDuration,
     isHidden: curriculum.isHidden,
     objectives: z.array(curriculumObjectiveSchema).parse(curriculum.objectives),
-    modules: z.array(curriculumModuleSchema).parse(curriculum.modules),
+    modules,
     recommendedResources: z
       .array(curriculumResourceSchema)
       .parse(curriculum.recommendedResources),

@@ -199,23 +199,6 @@ export type JsonWithAggregatesFilterBase<$PrismaModel = never> = {
   _max?: Prisma.NestedJsonFilter<$PrismaModel>
 }
 
-export type EnumLessonActivityTypeFilter<$PrismaModel = never> = {
-  equals?: $Enums.LessonActivityType | Prisma.EnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  in?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  notIn?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  not?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel> | $Enums.LessonActivityType
-}
-
-export type EnumLessonActivityTypeWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.LessonActivityType | Prisma.EnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  in?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  notIn?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  not?: Prisma.NestedEnumLessonActivityTypeWithAggregatesFilter<$PrismaModel> | $Enums.LessonActivityType
-  _count?: Prisma.NestedIntFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel>
-}
-
 export type IntFilter<$PrismaModel = never> = {
   equals?: number | Prisma.IntFieldRefInput<$PrismaModel>
   in?: number[] | Prisma.ListIntFieldRefInput<$PrismaModel>
@@ -241,6 +224,40 @@ export type IntWithAggregatesFilter<$PrismaModel = never> = {
   _sum?: Prisma.NestedIntFilter<$PrismaModel>
   _min?: Prisma.NestedIntFilter<$PrismaModel>
   _max?: Prisma.NestedIntFilter<$PrismaModel>
+}
+
+export type EnumLessonActivityTypeFilter<$PrismaModel = never> = {
+  equals?: $Enums.LessonActivityType | Prisma.EnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel> | $Enums.LessonActivityType
+}
+
+export type EnumLessonStatusFilter<$PrismaModel = never> = {
+  equals?: $Enums.LessonStatus | Prisma.EnumLessonStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.LessonStatus[] | Prisma.ListEnumLessonStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.LessonStatus[] | Prisma.ListEnumLessonStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumLessonStatusFilter<$PrismaModel> | $Enums.LessonStatus
+}
+
+export type EnumLessonActivityTypeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.LessonActivityType | Prisma.EnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumLessonActivityTypeWithAggregatesFilter<$PrismaModel> | $Enums.LessonActivityType
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel>
+}
+
+export type EnumLessonStatusWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.LessonStatus | Prisma.EnumLessonStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.LessonStatus[] | Prisma.ListEnumLessonStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.LessonStatus[] | Prisma.ListEnumLessonStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumLessonStatusWithAggregatesFilter<$PrismaModel> | $Enums.LessonStatus
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumLessonStatusFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumLessonStatusFilter<$PrismaModel>
 }
 
 export type JsonNullableFilter<$PrismaModel = never> =
@@ -482,23 +499,6 @@ export type NestedJsonFilterBase<$PrismaModel = never> = {
   not?: runtime.InputJsonValue | Prisma.JsonFieldRefInput<$PrismaModel> | Prisma.JsonNullValueFilter
 }
 
-export type NestedEnumLessonActivityTypeFilter<$PrismaModel = never> = {
-  equals?: $Enums.LessonActivityType | Prisma.EnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  in?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  notIn?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  not?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel> | $Enums.LessonActivityType
-}
-
-export type NestedEnumLessonActivityTypeWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.LessonActivityType | Prisma.EnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  in?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  notIn?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
-  not?: Prisma.NestedEnumLessonActivityTypeWithAggregatesFilter<$PrismaModel> | $Enums.LessonActivityType
-  _count?: Prisma.NestedIntFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel>
-}
-
 export type NestedIntWithAggregatesFilter<$PrismaModel = never> = {
   equals?: number | Prisma.IntFieldRefInput<$PrismaModel>
   in?: number[] | Prisma.ListIntFieldRefInput<$PrismaModel>
@@ -524,6 +524,40 @@ export type NestedFloatFilter<$PrismaModel = never> = {
   gt?: number | Prisma.FloatFieldRefInput<$PrismaModel>
   gte?: number | Prisma.FloatFieldRefInput<$PrismaModel>
   not?: Prisma.NestedFloatFilter<$PrismaModel> | number
+}
+
+export type NestedEnumLessonActivityTypeFilter<$PrismaModel = never> = {
+  equals?: $Enums.LessonActivityType | Prisma.EnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel> | $Enums.LessonActivityType
+}
+
+export type NestedEnumLessonStatusFilter<$PrismaModel = never> = {
+  equals?: $Enums.LessonStatus | Prisma.EnumLessonStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.LessonStatus[] | Prisma.ListEnumLessonStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.LessonStatus[] | Prisma.ListEnumLessonStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumLessonStatusFilter<$PrismaModel> | $Enums.LessonStatus
+}
+
+export type NestedEnumLessonActivityTypeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.LessonActivityType | Prisma.EnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.LessonActivityType[] | Prisma.ListEnumLessonActivityTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumLessonActivityTypeWithAggregatesFilter<$PrismaModel> | $Enums.LessonActivityType
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumLessonActivityTypeFilter<$PrismaModel>
+}
+
+export type NestedEnumLessonStatusWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.LessonStatus | Prisma.EnumLessonStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.LessonStatus[] | Prisma.ListEnumLessonStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.LessonStatus[] | Prisma.ListEnumLessonStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumLessonStatusWithAggregatesFilter<$PrismaModel> | $Enums.LessonStatus
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumLessonStatusFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumLessonStatusFilter<$PrismaModel>
 }
 
 export type NestedJsonNullableFilter<$PrismaModel = never> =

@@ -1,10 +1,10 @@
 "use client";
 
-import type { CurriculumModule } from "@/inngest/schemas";
+import type { CurriculumModuleWithLessons } from "@/lib/queries/lesson";
 import { ModuleCard } from "./module-card";
 
 type Props = {
-  modules: CurriculumModule[];
+  modules: CurriculumModuleWithLessons[];
 };
 
 export function ModulesTab({ modules }: Props) {
@@ -17,7 +17,7 @@ export function ModulesTab({ modules }: Props) {
   return (
     <ul className="flex flex-col gap-3">
       {modules.map((module, index) => (
-        <li key={`${index}-${module.title}`} className="min-w-0">
+        <li key={module.id} className="min-w-0">
           <ModuleCard module={module} index={index} />
         </li>
       ))}

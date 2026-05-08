@@ -15,13 +15,11 @@ import {
   DropdownMenuTrigger,
 } from "@quazom-ai/ui/components/ui/dropdown-menu";
 import {
-  CalendarIcon,
   ChevronUpIcon,
   LogOutIcon,
-  PlusIcon,
   SettingsIcon,
+  StickyNoteIcon,
 } from "lucide-react";
-import { Button } from "@quazom-ai/ui/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import NewCurriculumModal from "../new-curriculum-modal";
 
@@ -80,9 +78,9 @@ export function UserMenu({ firstName, fullName, avatarUrl }: UserMenuProps) {
           <NewCurriculumModal />
         </DropdownMenuItem>
         <DropdownMenuItem asChild className="cursor-pointer">
-          <Link href="/schedule">
-            <CalendarIcon />
-            <span>View Schedule</span>
+          <Link href="/notes">
+            <StickyNoteIcon />
+            <span>Notes</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild className="cursor-pointer">

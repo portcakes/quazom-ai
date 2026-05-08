@@ -15,12 +15,21 @@ export const LessonActivityType = {
   EXERCISE: 'EXERCISE',
   PROJECT: 'PROJECT',
   DISCUSSION: 'DISCUSSION',
-  PRACTICE: 'PRACTICE',
   READING: 'READING',
   OTHER: 'OTHER'
 } as const
 
 export type LessonActivityType = (typeof LessonActivityType)[keyof typeof LessonActivityType]
+
+
+export const LessonStatus = {
+  STUB: 'STUB',
+  GENERATING: 'GENERATING',
+  READY: 'READY',
+  FAILED: 'FAILED'
+} as const
+
+export type LessonStatus = (typeof LessonStatus)[keyof typeof LessonStatus]
 
 
 export const ProjectType = {

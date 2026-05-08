@@ -14,18 +14,19 @@ datasource db {
 
 
 model User {
-  id            String    @id
-  name          String
-  email         String
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
-  curricula     Curriculum[]
+  id              String            @id
+  name            String
+  email           String
+  emailVerified   Boolean           @default(false)
+  image           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  sessions        Session[]
+  accounts        Account[]
+  curricula       Curriculum[]
   userEvaluations UserEvaluations[]
-  notes Notes[]
+  notes           Note[]
+
   @@unique([email])
   @@map("user")
 }
@@ -79,38 +80,43 @@ model Verification {
 }
 
 model Curriculum {
-  id        String   @id
-  userId    String
-  title     String
-  subject   String
-  level     String
-  goal      String
-  overview  String
-  estimatedDuration String
-  objectives Json
-  modules Json
+  id                   String   @id
+  userId               String
+  title                String
+  subject              String
+  level                String
+  goal                 String
+  overview             String
+  estimatedDuration    String
+  objectives           Json
+  modules              Json
   recommendedResources Json
-  raw_ai_response String
+  raw_ai_response      String
   structured_data_json Json
-  isHidden Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  curriculumModules Module[]
+  isHidden             Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  curriculumModules    Module[]
+  notes                Note[]
+
   @@index([userId])
   @@map("curriculum")
 }
 
 model Module {
-  id        String   @id
+  id           String     @id
   curriculumId String
-  curriculum Curriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
-  title String
-  summary String
-  objectives Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  lessons Lesson[]
+  curriculum   Curriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  title        String
+  summary      String
+  // 1-indexed position within the curriculum, used to render modules in order
+  order        Int        @default(0)
+  objectives   Json
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  lessons      Lesson[]
+
   @@index([curriculumId])
   @@map("module")
 }
@@ -121,90 +127,114 @@ enum LessonActivityType {
   EXERCISE
   PROJECT
   DISCUSSION
-  PRACTICE
   READING
   OTHER
 }
+
+// Tracks whether the lesson has had its full AI content + per-type child rows
+// generated. STUB rows are created at curriculum-creation time so each lesson
+// already has a stable id/url; READY means a full generation has succeeded.
+enum LessonStatus {
+  STUB
+  GENERATING
+  READY
+  FAILED
+}
+
 model Lesson {
-  id        String   @id
-  moduleId String
-  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  title String
-  summary String
-  activityType LessonActivityType
-  content String
-  duration String
-  objectives Json
-  recommendedResources Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  quizzes Quiz[]
-  videos Video[]
-  exercises Exercise[]
-  projects Project[]
-  discussions Discussion[]
-  lessonNotes LessonNotes[]
+  id                   String             @id
+  moduleId             String
+  module               Module             @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title                String
+  description          String             @default("")
+  summary              String             @default("")
+  activityType         LessonActivityType
+  // 1-indexed position within the module
+  order                Int                @default(0)
+  status               LessonStatus       @default(STUB)
+  content              String             @default("")
+  duration             String             @default("")
+  objectives           Json               @default("[]")
+  recommendedResources Json               @default("[]")
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  quizzes              Quiz[]
+  videos               Video[]
+  exercises            Exercise[]
+  projects             Project[]
+  discussions          Discussion[]
+  readings             Readings[]
+  notes                Note[]
+
   @@index([moduleId])
   @@map("lesson")
 }
 
 model Video {
-  id        String   @id
-  lessonId String
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  title String
-  description String
-  embedUrl String
+  id           String   @id
+  lessonId     String
+  lesson       Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title        String
+  description  String
+  // AI overview shown above the embed, distinct from the AI's short description
+  overview     String   @default("")
+  embedUrl     String
+  // External link surfaced when embedUrl can't be embedded (non-YouTube, etc.)
+  externalUrl  String?
   thumbnailUrl String?
-  duration Int
-  isCompleted Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  duration     String   @default("")
+  isCompleted  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
   @@index([lessonId])
   @@map("video")
 }
+
 model Quiz {
-  id        String   @id
-  lessonId String
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  title String
-  questions Json
-  answers Json
-  correctAnswers Json
-  feedback Json?
-  score Int @default(0)
-  maxScore Int @default(100)
-  passScore Int @default(75)
-  isPassed Boolean @default(false)
-  isCompleted Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  quizNotes QuizNotes[]
+  id             String   @id
+  lessonId       String
+  lesson         Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title          String
+  // Array of QuizQuestion: { question, answers: string[], correctAnswerIndex }
+  questions      Json
+  // Array of indices the user submitted, parallel to questions
+  userAnswers    Json?
+  feedback       Json?
+  score          Int      @default(0)
+  maxScore       Int      @default(100)
+  passScore      Int      @default(65)
+  isPassed       Boolean  @default(false)
+  isCompleted    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
   @@index([lessonId])
   @@map("quiz")
 }
 
 model Exercise {
-  id        String   @id
-  lessonId String
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  title String
-  description String
-  instructions Json
-  hints Json
-  correctAnswers Json
-  userAnswers Json?
-  score Int @default(0)
-  maxScore Int @default(100)
-  passScore Int @default(75)
-  isPassed Boolean @default(false)
-  isCompleted Boolean @default(false)
-  feedback Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id
+  lessonId     String
+  lesson       Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title        String
+  description  String
+  // Same shape as Quiz.questions — exercises are MC assessments per spec
+  questions    Json
+  hints        Json     @default("[]")
+  userAnswers  Json?
+  score        Int      @default(0)
+  maxScore     Int      @default(100)
+  passScore    Int      @default(65)
+  isPassed     Boolean  @default(false)
+  isCompleted  Boolean  @default(false)
+  feedback     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
   @@index([lessonId])
   @@map("exercise")
-} 
+}
 
 enum ProjectType {
   PRESENTATION
@@ -217,87 +247,98 @@ enum ProjectType {
   CODE_PROJECT
   OTHER
 }
+
 model Project {
-  id        String   @id
-  lessonId String
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  title String
-  summary String
-  objectives Json
+  id                   String      @id
+  lessonId             String
+  lesson               Lesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title                String
+  summary              String
+  // Rubric-style objectives the learner must meet
+  objectives           Json
   recommendedResources Json
-  projectType ProjectType
-  projectUrl String?
-  projectFileUrl String?
-  isCompleted Boolean @default(false)
-  feedback Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  projectType          ProjectType
+  submissionUrl        String?
+  isCompleted          Boolean     @default(false)
+  feedback             Json?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
   @@index([lessonId])
   @@map("project")
 }
 
 model Discussion {
-  id        String   @id
-  lessonId String
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  title String
-  summary String
-  objectives Json
+  id                   String   @id
+  lessonId             String
+  lesson               Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title                String
+  summary              String
+  // Talking points / objectives the discussion should explore
+  objectives           Json
   recommendedResources Json
-  aiResponses Json?
-  userResponses Json?
-  chatHistory Json?
-  chatSummary String?
-  isCompleted Boolean @default(false)
-  feedback Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Array of { role: 'assistant' | 'user', content: string, createdAt: ISO }
+  chatHistory          Json     @default("[]")
+  isCompleted          Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
   @@index([lessonId])
   @@map("discussion")
 }
 
-model LessonNotes {
-  id        String   @id
-  lessonId String
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  title String?
-  content String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Readings {
+  id                   String   @id
+  lessonId             String
+  lesson               Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title                String
+  summary              String
+  // Topic overview displayed above the deep-dive
+  overview             String   @default("")
+  // The main body / deep-dive content (markdown)
+  content              String
+  recommendedResources Json
+  isCompleted          Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
   @@index([lessonId])
-  @@map("lesson_notes")
+  @@map("readings")
 }
 
-model QuizNotes {
-  id        String   @id
-  quizId String
-  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  title String?
-  content String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  @@index([quizId])
-  @@map("quiz_notes")
-}
+// Single polymorphic notes table. A note belongs to a user and can optionally
+// be scoped to a lesson and/or a curriculum:
+//  - lessonId set, curriculumId set     → in-lesson note (also surfaces in the
+//                                         curriculum's Notes tab via curriculumId)
+//  - lessonId null, curriculumId set    → curriculum-level note
+//  - lessonId null, curriculumId null   → free-form user note (homepage / /notes)
+model Note {
+  id           String      @id
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId     String?
+  lesson       Lesson?     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  curriculumId String?
+  curriculum   Curriculum? @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  title        String?
+  content      String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
-model Notes {
-  id        String   @id
-  userId String
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title String?
-  content String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
   @@index([userId])
-  @@map("user_notes")
+  @@index([lessonId])
+  @@index([curriculumId])
+  @@map("note")
 }
+
 model UserEvaluations {
-  id        String   @id
-  userId String
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String   @id
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   evaluation Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
   @@index([userId])
   @@map("user_evaluations")
 }

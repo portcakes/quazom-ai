@@ -2,21 +2,22 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@quazom-ai/ui/components/ui/tabs";
 import type {
-  CurriculumModule,
   CurriculumObjective,
   CurriculumResource,
 } from "@/inngest/schemas";
+import type { CurriculumModuleWithLessons } from "@/lib/queries/lesson";
 import { SyllabusTab } from "./syllabus-tab";
 import { ModulesTab } from "./modules-tab";
 import { ResourcesTab } from "./resources-tab";
 import { OptionsTab } from "./options-tab";
+import { CurriculumNotesTab } from "./notes-tab";
 
 type Props = {
   id: string;
   title: string;
   isHidden: boolean;
   objectives: CurriculumObjective[];
-  modules: CurriculumModule[];
+  modules: CurriculumModuleWithLessons[];
   resources: CurriculumResource[];
 };
 
@@ -40,6 +41,7 @@ export function CurriculumTabs({
             <TabsTrigger value="syllabus" className="cursor-pointer">Syllabus</TabsTrigger>
             <TabsTrigger value="modules" className="cursor-pointer">Modules</TabsTrigger>
             <TabsTrigger value="resources" className="cursor-pointer">Resources</TabsTrigger>
+            <TabsTrigger value="notes" className="cursor-pointer">Notes</TabsTrigger>
             <TabsTrigger value="options" className="cursor-pointer">Options</TabsTrigger>
           </TabsList>
         </div>
@@ -51,6 +53,9 @@ export function CurriculumTabs({
         </TabsContent>
         <TabsContent value="resources" className="mt-6">
           <ResourcesTab resources={resources} />
+        </TabsContent>
+        <TabsContent value="notes" className="mt-6">
+          <CurriculumNotesTab curriculumId={id} />
         </TabsContent>
         <TabsContent value="options" className="mt-6">
           <OptionsTab id={id} title={title} isHidden={isHidden} />

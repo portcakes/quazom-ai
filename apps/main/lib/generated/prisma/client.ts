@@ -102,20 +102,15 @@ export type Project = Prisma.ProjectModel
  */
 export type Discussion = Prisma.DiscussionModel
 /**
- * Model LessonNotes
+ * Model Readings
  * 
  */
-export type LessonNotes = Prisma.LessonNotesModel
+export type Readings = Prisma.ReadingsModel
 /**
- * Model QuizNotes
+ * Model Note
  * 
  */
-export type QuizNotes = Prisma.QuizNotesModel
-/**
- * Model Notes
- * 
- */
-export type Notes = Prisma.NotesModel
+export type Note = Prisma.NoteModel
 /**
  * Model UserEvaluations
  * 
