@@ -19,6 +19,11 @@
       }
     ],
     "paths": {
+      "@quazom-ai/ui/globals.css": ["../../packages/ui/src/styles/globals.css"],
+      "@quazom-ai/ui/components/ui/*": [
+        "../../packages/ui/src/components/ui/*"
+      ],
+      "@quazom-ai/ui/lib/utils": ["../../packages/ui/src/lib/utils.ts"],
       "@/*": ["./*"]
     }
   },
