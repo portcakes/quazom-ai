@@ -6,6 +6,7 @@ import { CheckIcon, ExternalLinkIcon } from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { useTRPC } from "@/trpc/client";
 import type { LessonDetail } from "@/lib/queries/lesson";
+import { Markdown } from "@/components/shared/markdown";
 
 type Props = {
   lesson: LessonDetail;
@@ -33,9 +34,9 @@ export function VideoView({ lesson }: Props) {
       {video.overview ? (
         <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
           <h2 className="font-heading text-lg font-semibold">Overview</h2>
-          <div className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+          <Markdown compact className="text-muted-foreground">
             {video.overview}
-          </div>
+          </Markdown>
         </section>
       ) : null}
 

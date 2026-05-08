@@ -7,6 +7,7 @@ import { Button } from "@quazom-ai/ui/components/ui/button";
 import { Badge } from "@quazom-ai/ui/components/ui/badge";
 import { useTRPC } from "@/trpc/client";
 import type { LessonDetail } from "@/lib/queries/lesson";
+import { Markdown } from "@/components/shared/markdown";
 import { LessonNotesPanel } from "./lesson-notes-panel";
 
 type Props = {
@@ -32,14 +33,14 @@ export function ReadingView({ lesson }: Props) {
       {reading.overview ? (
         <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
           <h2 className="font-heading text-lg font-semibold">Overview</h2>
-          <div className="prose-sm whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+          <Markdown compact className="text-muted-foreground">
             {reading.overview}
-          </div>
+          </Markdown>
         </section>
       ) : null}
 
-      <article className="prose prose-neutral dark:prose-invert max-w-none whitespace-pre-wrap text-base leading-relaxed">
-        {reading.content}
+      <article className="max-w-none">
+        <Markdown>{reading.content}</Markdown>
       </article>
 
       {reading.recommendedResources.length > 0 ? (
