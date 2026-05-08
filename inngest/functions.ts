@@ -3,6 +3,7 @@ import { userChannel } from "./channels";
 import {
   curriculumSchema,
   lessonGenerationSchema,
+  modulesBackfillSchema,
   submissionFeedbackSchema,
   activityTypeToDb,
   type LessonActivityType,
@@ -108,6 +109,159 @@ Sequence modules from foundational to advanced. Each lesson must have a concrete
     );
 
     return { curriculumId: saved.id, title: saved.title };
+  },
+);
+
+// --------------------------------------------------------------------------
+// backfillCurriculumModules
+//
+// Dev-only tool: regenerates a fresh 4-5 module / 5-8 lesson skeleton for an
+// existing curriculum and creates the matching Module + Lesson STUB rows.
+// Used to recover curricula that pre-date the change to pre-create stubs at
+// curriculum-creation time. Refuses to run if the curriculum already has any
+// modules to avoid clobbering real data.
+// --------------------------------------------------------------------------
+type BackfillModulesEvent = {
+  data: {
+    curriculumId: string;
+    userId: string;
+  };
+};
+
+export const backfillCurriculumModules = inngest.createFunction(
+  {
+    id: "backfill-curriculum-modules",
+    triggers: { event: "app/curriculum.backfill_modules" },
+  },
+  async ({
+    event,
+    step,
+  }: {
+    event: BackfillModulesEvent;
+    step: Parameters<Parameters<typeof inngest.createFunction>[1]>[0]["step"];
+  }) => {
+    const { curriculumId, userId } = event.data;
+
+    const curriculum = await step.run("load-curriculum", async () => {
+      const row = await prisma.curriculum.findUnique({
+        where: { id: curriculumId },
+        select: {
+          id: true,
+          userId: true,
+          title: true,
+          subject: true,
+          level: true,
+          goal: true,
+          overview: true,
+          curriculumModules: { select: { id: true } },
+        },
+      });
+      if (!row) throw new Error(`Curriculum ${curriculumId} not found`);
+      if (row.userId !== userId) {
+        throw new Error("Curriculum does not belong to the requesting user");
+      }
+      if (row.curriculumModules.length > 0) {
+        throw new Error(
+          "Curriculum already has modules; refusing to overwrite",
+        );
+      }
+      return row;
+    });
+
+    const result = await step.ai.wrap(
+      "gemini-backfill-modules",
+      generateObject,
+      {
+        model: google(MODEL),
+        schema: modulesBackfillSchema,
+        system:
+          "You are an expert instructional designer. Generate a clear, well-structured set of modules and lessons for an existing curriculum. Be specific, actionable, and avoid filler.",
+        prompt: `Generate the module structure for the following existing curriculum.
+
+Title: ${curriculum.title}
+Subject: ${curriculum.subject}
+Level: ${curriculum.level}
+Learner goal: ${curriculum.goal}
+Curriculum overview: ${curriculum.overview}
+
+Constraints:
+- Output exactly 4 to 5 modules.
+- Each module must contain 5 to 8 lessons.
+- Sequence modules from foundational to advanced.
+- Each lesson must have a concrete activityType (one of: reading, video, quiz, exercise, project, discussion).
+- Vary activityType across lessons within a module so the learner is not just reading.`,
+      },
+    );
+
+    const parsed = modulesBackfillSchema.parse(
+      (result as { object: unknown }).object,
+    );
+
+    const saved = await step.run("save-modules-and-lessons", async () => {
+      return prisma.$transaction(async (tx) => {
+        // Re-check inside the transaction in case the user clicked twice.
+        const existing = await tx.module.count({ where: { curriculumId } });
+        if (existing > 0) {
+          throw new Error(
+            "Curriculum already has modules (race); refusing to overwrite",
+          );
+        }
+
+        let lessonCount = 0;
+        for (const [moduleIdx, mod] of parsed.modules.entries()) {
+          const moduleId = crypto.randomUUID();
+          await tx.module.create({
+            data: {
+              id: moduleId,
+              curriculumId,
+              title: mod.title,
+              summary: mod.summary,
+              order: moduleIdx + 1,
+              objectives: mod.objectives,
+            },
+          });
+
+          if (mod.lessons.length === 0) continue;
+
+          await tx.lesson.createMany({
+            data: mod.lessons.map((lesson, lessonIdx) => ({
+              id: crypto.randomUUID(),
+              moduleId,
+              title: lesson.title,
+              description: lesson.description,
+              activityType: activityTypeToDb(lesson.activityType),
+              order: lessonIdx + 1,
+              status: "STUB",
+            })),
+          });
+          lessonCount += mod.lessons.length;
+        }
+
+        // Keep the curriculum.modules JSON in sync for any future caller that
+        // still reads from it. Not strictly required since the UI reads from
+        // the relational rows, but cheap to do here.
+        await tx.curriculum.update({
+          where: { id: curriculumId },
+          data: { modules: parsed.modules },
+        });
+
+        return { moduleCount: parsed.modules.length, lessonCount };
+      });
+    });
+
+    // Reuse the curriculumReady topic so the existing layout-level listener
+    // refreshes the curriculum page automatically.
+    await step.realtime.publish(
+      "publish-curriculum-ready",
+      userChannel(userId).curriculumReady,
+      { id: curriculum.id, title: curriculum.title },
+    );
+
+    return {
+      curriculumId,
+      moduleCount: saved.moduleCount,
+      lessonCount: saved.lessonCount,
+    };
   },
 );
 

@@ -74,6 +74,19 @@ export const curriculumSchema = z.object({
   recommendedResources: z.array(curriculumResourceSchema),
 });
 
+// Used by the dev "backfill modules" tool on the curriculum page. Produces a
+// fresh module-skeleton (no per-lesson AI content) for an existing curriculum.
+// Sized to 4-5 modules with 5-8 lessons each per the dev tool spec.
+export const modulesBackfillSchema = z.object({
+  modules: z
+    .array(curriculumModuleSchema)
+    .min(4)
+    .max(5)
+    .describe(
+      "4-5 modules sequenced foundational → advanced. Each module must contain 5-8 concrete lessons with a defined activityType.",
+    ),
+});
+
 // Generic body shared by every lesson type. The activityType-specific child
 // content lives in `*Schema` below and is generated alongside this base.
 export const lessonBaseSchema = z.object({
@@ -246,6 +259,7 @@ export type CurriculumLesson = z.infer<typeof curriculumLessonSchema>;
 export type CurriculumModule = z.infer<typeof curriculumModuleSchema>;
 export type CurriculumResource = z.infer<typeof curriculumResourceSchema>;
 export type CurriculumPayload = z.infer<typeof curriculumSchema>;
+export type ModulesBackfillPayload = z.infer<typeof modulesBackfillSchema>;
 export type LessonBase = z.infer<typeof lessonBaseSchema>;
 export type LessonGeneration = z.infer<typeof lessonGenerationSchema>;
 export type VideoContent = z.infer<typeof videoContentSchema>;

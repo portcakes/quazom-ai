@@ -80,6 +80,31 @@ export const appRouter = createTRPCRouter({
       });
       return { deleted: result.count };
     }),
+  // Dev-only backfill: regenerate modules + lesson stubs for a curriculum that
+  // has none. Refuses if any modules already exist so we can't accidentally
+  // wipe real data on a curriculum that was created post-migration.
+  backfillCurriculumModules: protectedcProcedure
+    .input(z.object({ curriculumId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const curriculum = await prisma.curriculum.findFirst({
+        where: { id: input.curriculumId, userId: ctx.userId },
+        select: { id: true, _count: { select: { curriculumModules: true } } },
+      });
+      if (!curriculum) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Curriculum not found' });
+      }
+      if (curriculum._count.curriculumModules > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'This curriculum already has modules.',
+        });
+      }
+      await inngest.send({
+        name: 'app/curriculum.backfill_modules',
+        data: { curriculumId: curriculum.id, userId: ctx.userId },
+      });
+      return { ok: true };
+    }),
 
   // ---------------------------------------------------------------------
   // Lessons
