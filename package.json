@@ -18,5 +18,9 @@
     },
     "devDependencies": {
         "mprocs": "^0.9.2"
+    },
+    "optionalDependencies": {
+        "@tailwindcss/oxide-linux-x64-gnu": "4.2.4",
+        "lightningcss-linux-x64-gnu": "1.32.0"
     }
 }
