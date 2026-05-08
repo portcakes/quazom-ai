@@ -34,11 +34,16 @@ const registerSchema = z
     email: z.email("Please enter a valid email address."),
     password: z.string().min(8, "Password must be at least 8 characters."),
     confirmPassword: z.string(),
+    alphaCode: z.string().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match.",
-    path: ["confirmPassword"],
-  });
+      message: "Passwords do not match.",
+      path: ["confirmPassword"],
+    })
+    .refine((data) => data.alphaCode === process.env.ALPHA_CODE, {
+      message: "Invalid alpha code.",
+      path: ["alphaCode"],
+    });
 
 type RegisterValues = z.infer<typeof registerSchema>;
 
@@ -53,6 +58,7 @@ export function RegisterForm() {
       email: "",
       password: "",
       confirmPassword: "",
+      alphaCode: "",
     },
     mode: "onTouched",
   });
@@ -159,6 +165,24 @@ export function RegisterForm() {
                     <Input
                       type="password"
                       autoComplete="new-password"
+                      disabled={isSubmitting}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="alphaCode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Alpha code</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="text"
+                      autoComplete="alpha-code"
                       disabled={isSubmitting}
                       {...field}
                     />
