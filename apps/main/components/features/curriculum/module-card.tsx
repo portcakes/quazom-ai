@@ -36,11 +36,14 @@ export function ModuleCard({ module, index }: Props) {
           className="group flex w-full min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-5 text-left transition-colors hover:bg-sidebar-accent/40 hover:ring-1 hover:ring-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
         >
           <div className="flex w-full items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-sm font-medium text-muted-foreground">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-sm font-medium text-muted-foreground">
                 {index + 1}
               </span>
-              <h3 className="min-w-0 truncate font-heading text-lg font-semibold">
+              {/* break-words instead of truncate so long titles wrap on
+                  narrow viewports rather than getting clipped past the
+                  card edge. */}
+              <h3 className="min-w-0 break-words font-heading text-lg font-semibold">
                 {module.title}
               </h3>
             </div>
@@ -49,7 +52,7 @@ export function ModuleCard({ module, index }: Props) {
               {module.lessons.length === 1 ? "lesson" : "lessons"}
             </Badge>
           </div>
-          <p className="text-sm leading-relaxed text-muted-foreground">
+          <p className="break-words text-sm leading-relaxed text-muted-foreground">
             {module.summary}
           </p>
           {module.objectives.length > 0 ? (
@@ -70,8 +73,12 @@ export function ModuleCard({ module, index }: Props) {
 
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="font-heading text-xl">{module.title}</DialogTitle>
-          <DialogDescription>{module.summary}</DialogDescription>
+          <DialogTitle className="break-words font-heading text-xl">
+            {module.title}
+          </DialogTitle>
+          <DialogDescription className="break-words">
+            {module.summary}
+          </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-2">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -124,65 +131,100 @@ function LessonRow({ lesson, index, onNavigate }: LessonRowProps) {
   const isGenerating = lesson.status === "GENERATING" || generate.isPending;
   const isFailed = lesson.status === "FAILED";
 
+  // Single button class so the desktop/inline and mobile/below variants stay
+  // visually identical apart from sizing. `w-3/4` honours the 75% mobile
+  // request; `sm:w-auto` snaps back to natural width once the row goes
+  // horizontal.
+  const buttonClass = "w-3/4 cursor-pointer sm:w-auto";
+
+  const button = isReady ? (
+    <Button
+      asChild
+      size="sm"
+      variant="outline"
+      className={buttonClass}
+      onClick={onNavigate}
+    >
+      <Link href={`/lessons/${lesson.id}`}>
+        Open
+        <ArrowRightIcon className="size-3.5" />
+      </Link>
+    </Button>
+  ) : isGenerating ? (
+    <Button
+      asChild
+      size="sm"
+      variant="outline"
+      className={buttonClass}
+      onClick={onNavigate}
+    >
+      <Link href={`/lessons/${lesson.id}`}>
+        <Loader2Icon className="size-3.5 animate-spin" />
+        Generating
+      </Link>
+    </Button>
+  ) : (
+    <Button
+      type="button"
+      size="sm"
+      variant={isFailed ? "destructive" : "default"}
+      className={buttonClass}
+      disabled={generate.isPending}
+      onClick={() => generate.mutate({ lessonId: lesson.id })}
+    >
+      {isFailed ? (
+        <>
+          <RefreshCwIcon className="size-3.5" />
+          Retry
+        </>
+      ) : (
+        <>
+          <SparklesIcon className="size-3.5" />
+          Generate
+        </>
+      )}
+    </Button>
+  );
+
+  // Layout:
+  //   - <sm: stack vertically. Header row holds the lesson title/desc and the
+  //     activity badge; the action button drops to its own centered row.
+  //   - sm+: original single-row layout with title/desc on the left, badge +
+  //     button on the right.
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+    <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-start gap-3 sm:flex-1 sm:items-center">
+        <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
           {String(index + 1).padStart(2, "0")}
         </span>
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate text-sm font-medium">{lesson.title}</span>
-          <span className="line-clamp-1 text-xs text-muted-foreground">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex items-start justify-between gap-2 sm:items-center">
+            <span className="min-w-0 break-words text-sm font-medium">
+              {lesson.title}
+            </span>
+            {/* Badge sits inline with the title on mobile so the description
+                gets the full row width below; on desktop the badge moves to
+                the trailing action group instead. */}
+            <Badge
+              variant="secondary"
+              className="shrink-0 capitalize sm:hidden"
+            >
+              {lesson.activityType.toLowerCase()}
+            </Badge>
+          </div>
+          <span className="line-clamp-2 break-words text-xs text-muted-foreground">
             {lesson.description}
           </span>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <Badge variant="secondary" className="capitalize">
+      <div className="flex w-full items-center justify-center gap-2 sm:w-auto sm:shrink-0 sm:justify-end">
+        <Badge
+          variant="secondary"
+          className="hidden shrink-0 capitalize sm:inline-flex"
+        >
           {lesson.activityType.toLowerCase()}
         </Badge>
-        {isReady ? (
-          <Button
-            asChild
-            size="sm"
-            variant="outline"
-            className="cursor-pointer"
-            onClick={onNavigate}
-          >
-            <Link href={`/lessons/${lesson.id}`}>
-              Open
-              <ArrowRightIcon className="size-3.5" />
-            </Link>
-          </Button>
-        ) : isGenerating ? (
-          <Button asChild size="sm" variant="outline" className="cursor-pointer" onClick={onNavigate}>
-            <Link href={`/lessons/${lesson.id}`}>
-              <Loader2Icon className="size-3.5 animate-spin" />
-              Generating
-            </Link>
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            size="sm"
-            variant={isFailed ? "destructive" : "default"}
-            className="cursor-pointer"
-            disabled={generate.isPending}
-            onClick={() => generate.mutate({ lessonId: lesson.id })}
-          >
-            {isFailed ? (
-              <>
-                <RefreshCwIcon className="size-3.5" />
-                Retry
-              </>
-            ) : (
-              <>
-                <SparklesIcon className="size-3.5" />
-                Generate
-              </>
-            )}
-          </Button>
-        )}
+        {button}
       </div>
     </div>
   );

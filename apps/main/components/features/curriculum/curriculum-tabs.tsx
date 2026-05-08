@@ -36,16 +36,28 @@ export function CurriculumTabs({
         {/* Sticky tabs on every screen size so users can switch tabs without
             scrolling back to the top. Offset matches the sticky chrome:
               - portrait mobile (<md): navbar h-12 + compact header h-12 = top-24
-              - everywhere else: just the compact header h-12 = top-12 */}
-        <div className="sticky top-24 z-10 -mx-6 border-b border-border bg-background/95 px-6 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:top-12">
-          <TabsList>
-            <TabsTrigger value="syllabus" className="cursor-pointer">Syllabus</TabsTrigger>
-            <TabsTrigger value="modules" className="cursor-pointer">Modules</TabsTrigger>
-            <TabsTrigger value="resources" className="cursor-pointer">Resources</TabsTrigger>
-            <TabsTrigger value="notes" className="cursor-pointer">Notes</TabsTrigger>
-            <TabsTrigger value="schedule" className="cursor-pointer">Study Schedule</TabsTrigger>
-            <TabsTrigger value="options" className="cursor-pointer">Options</TabsTrigger>
-          </TabsList>
+              - everywhere else: just the compact header h-12 = top-12
+
+            On narrow viewports the six tabs no longer fit in the strip's
+            natural width. We solve this with a horizontal scroll container
+            whose inner row uses `min-w-full w-fit` so that:
+              - when the tabs fit, they stay centered in the container
+              - when they overflow, the user can swipe horizontally
+            The scrollbar is hidden visually since the active-tab indicator
+            already cues "swipe to see more". */}
+        <div className="sticky top-24 z-10 -mx-6 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:top-12">
+          <div className="overflow-x-auto px-6 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex w-fit min-w-full justify-center">
+              <TabsList>
+                <TabsTrigger value="syllabus" className="cursor-pointer">Syllabus</TabsTrigger>
+                <TabsTrigger value="modules" className="cursor-pointer">Modules</TabsTrigger>
+                <TabsTrigger value="resources" className="cursor-pointer">Resources</TabsTrigger>
+                <TabsTrigger value="notes" className="cursor-pointer">Notes</TabsTrigger>
+                <TabsTrigger value="schedule" className="cursor-pointer">Study Schedule</TabsTrigger>
+                <TabsTrigger value="options" className="cursor-pointer">Options</TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
         </div>
         <TabsContent value="syllabus" className="mt-6">
           <SyllabusTab objectives={objectives} resources={resources} />
