@@ -169,9 +169,9 @@ export const exerciseContentSchema = z.object({
     .default(""),
   questions: z
     .array(quizQuestionSchema)
-    .min(15)
-    .max(20)
-    .describe("15-20 multiple choice questions, same shape as a quiz."),
+    .min(3)
+    .max(10)
+    .describe("5-10 multiple choice questions, same shape as a quiz."),
   hints: z
     .array(z.string())
     .describe("Optional hints the learner can reveal.")
