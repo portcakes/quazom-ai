@@ -1,6 +1,15 @@
 import * as React from "react";
-import { Button, Heading, Section, Text } from "react-email";
 import { BrandedLayout } from "../components/branded-layout";
+import {
+  Body,
+  H1,
+  Italic,
+  Kicker,
+  Meta,
+  MonoBlock,
+  PrimaryButton,
+} from "../components/atoms";
+import { palette } from "../components/theme";
 
 export type PasswordResetProps = {
   firstName: string;
@@ -17,47 +26,38 @@ export function PasswordReset({
 }: PasswordResetProps) {
   return (
     <BrandedLayout preview="Reset your Quazom password.">
-      <Heading
-        as="h1"
-        className="m-0 text-2xl font-bold leading-tight tracking-tight text-[#0a0a0a]"
-      >
-        Reset your password, {firstName}.
-      </Heading>
-      <Text className="mt-3 text-[15px] leading-relaxed text-[#404040]">
+      <Kicker>Reset your password</Kicker>
+      <H1>
+        New password, <Italic>{firstName}?</Italic>
+      </H1>
+      <Body>
         Someone (hopefully you) asked to reset your Quazom password. Use
         the button below to choose a new one.
-      </Text>
+      </Body>
 
-      <Section className="mt-6 text-center">
-        <Button
-          href={resetUrl}
-          className="rounded-lg bg-[#0a0a0a] px-5 py-3 text-sm font-medium text-white"
-        >
-          Reset my password
-        </Button>
-      </Section>
+      <PrimaryButton href={resetUrl}>Reset my password</PrimaryButton>
 
-      <Text className="mt-6 text-[13px] leading-relaxed text-[#525252]">
+      <Meta>
         If the button doesn&rsquo;t work, paste this link into your
         browser:
-      </Text>
-      <Text className="mt-1 break-all text-[12px] leading-relaxed text-[#737373]">
-        {resetUrl}
-      </Text>
+      </Meta>
+      <MonoBlock>{resetUrl}</MonoBlock>
 
-      <Text className="mt-6 text-[13px] leading-relaxed text-[#737373]">
-        This link expires in <strong>{expiresInMinutes} minutes</strong>.
-        If you didn&rsquo;t request a reset, you can safely ignore this
-        email &mdash; your password won&rsquo;t change.
-      </Text>
+      <Meta>
+        This link expires in{" "}
+        <span style={{ fontWeight: 700, color: palette.foreground }}>
+          {expiresInMinutes} minutes
+        </span>
+        . If you didn&rsquo;t request a reset, you can safely ignore
+        this email &mdash; your password won&rsquo;t change.
+      </Meta>
     </BrandedLayout>
   );
 }
 
 PasswordReset.PreviewProps = {
   firstName: "Ada",
-  resetUrl:
-    "http://localhost:3001/reset-password?token=preview-token",
+  resetUrl: "http://localhost:3001/reset-password?token=preview-token",
   expiresInMinutes: 60,
 } satisfies PasswordResetProps;
 

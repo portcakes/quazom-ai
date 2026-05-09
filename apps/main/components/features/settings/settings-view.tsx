@@ -129,7 +129,7 @@ export function SettingsView({ initialUser }: Props) {
           <CardTitle>Profile</CardTitle>
           <CardDescription>
             Your name and avatar are visible across the app. Email isn&apos;t
-            editable yet — reach out if you need to change it.
+            editable yet — reach out to <a href="mailto:support@quazom.ai">support@quazom.ai</a> if you need to change it.
           </CardDescription>
         </CardHeader>
         <CardContent>

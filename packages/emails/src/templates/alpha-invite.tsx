@@ -1,6 +1,17 @@
 import * as React from "react";
-import { Button, Heading, Section, Text } from "react-email";
+import { Text } from "react-email";
 import { BrandedLayout } from "../components/branded-layout";
+import {
+  Body,
+  Callout,
+  H1,
+  Italic,
+  Kicker,
+  Meta,
+  MonoBlock,
+  PrimaryButton,
+} from "../components/atoms";
+import { fontStacks, palette } from "../components/theme";
 
 export type AlphaInviteProps = {
   firstName: string;
@@ -28,47 +39,49 @@ export function AlphaInvite({
     <BrandedLayout
       preview={`Your Quazom alpha invite is ready, ${firstName}.`}
     >
-      <Heading
-        as="h1"
-        className="m-0 text-2xl font-bold leading-tight tracking-tight text-[#0a0a0a]"
-      >
-        Your seat is ready, {firstName}.
-      </Heading>
-      <Text className="mt-3 text-[15px] leading-relaxed text-[#404040]">
+      <Kicker>Your seat is ready</Kicker>
+      <H1>
+        It&rsquo;s your turn, <Italic>{firstName}.</Italic>
+      </H1>
+      <Body>
         A spot just opened in the Quazom alpha and we saved it for you.
         Use your personal access key below to create your account &mdash;
         it&rsquo;s tied to this email and works exactly once.
-      </Text>
+      </Body>
 
-      <Section className="mt-6 rounded-xl border border-[#0a0a0a] bg-[#0a0a0a] p-5 text-center">
-        <Text className="m-0 text-[11px] font-medium uppercase tracking-[0.18em] text-[#a8a29e]">
+      <Callout align="center">
+        <Text
+          style={{
+            margin: 0,
+            fontFamily: fontStacks.serif,
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: palette.primary,
+          }}
+        >
           Your alpha access key
         </Text>
-        <Text className="mt-2 mb-0 font-mono text-[18px] font-semibold tracking-[0.08em] text-white">
-          {accessKey}
-        </Text>
-      </Section>
+        <MonoBlock emphasis>{accessKey}</MonoBlock>
+      </Callout>
 
-      <Section className="mt-6 text-center">
-        <Button
-          href={registerUrl}
-          className="rounded-lg bg-[#0a0a0a] px-5 py-3 text-sm font-medium text-white"
-        >
-          Create your account
-        </Button>
-      </Section>
+      <PrimaryButton href={registerUrl}>Create your account</PrimaryButton>
 
-      <Text className="mt-6 text-[13px] leading-relaxed text-[#525252]">
-        This key expires on <strong>{expiresLabel}</strong>. After that
-        we&rsquo;ll need to mint you a fresh one &mdash; just reply and
-        we&rsquo;ll send another.
-      </Text>
+      <Meta>
+        This key expires on{" "}
+        <span style={{ fontWeight: 700, color: palette.foreground }}>
+          {expiresLabel}
+        </span>
+        . After that we&rsquo;ll need to mint you a fresh one &mdash;
+        just reply and we&rsquo;ll send another.
+      </Meta>
 
-      <Text className="mt-3 text-[13px] leading-relaxed text-[#737373]">
-        Heads up: the alpha is intentionally rough around the edges. Tell
-        us what works and what doesn&rsquo;t &mdash; your feedback shapes
-        what ships next.
-      </Text>
+      <Meta>
+        Heads up: the alpha is intentionally rough around the edges.
+        Tell us what works and what doesn&rsquo;t &mdash; your feedback
+        shapes what ships next.
+      </Meta>
     </BrandedLayout>
   );
 }
