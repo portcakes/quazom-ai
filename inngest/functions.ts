@@ -11,7 +11,7 @@ import {
 } from "./schemas";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateObject, generateText } from "ai";
-import prisma from "@/lib/db";
+import prisma from "@quazom-ai/db";
 
 const google = createGoogleGenerativeAI();
 const MODEL = "gemini-2.5-flash-lite";

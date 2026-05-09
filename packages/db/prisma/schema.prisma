@@ -5,7 +5,7 @@
 
 generator client {
   provider = "prisma-client"
-  output   = "../lib/generated/prisma"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -454,6 +454,22 @@ model AccountFeedback {
 
   @@index([action])
   @@map("account_feedback")
+}
+
+// Pre-launch / alpha-period waitlist signups captured from the marketing site
+// (apps/web). Email is unique so re-submissions just bump `updatedAt`. We
+// optionally record the page the signup came from (`source`) so we can tell
+// homepage CTA conversions apart from the dedicated /waitlist page.
+model WaitlistEntry {
+  id        String   @id
+  firstName String
+  email     String
+  source    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([email])
+  @@map("waitlist_entry")
 }
 
 // Daily check-ins. Streak is derived from these rows (no denormalised counter

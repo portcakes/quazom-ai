@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
-  ArrowRightIcon,
   BookOpenTextIcon,
   CalendarDaysIcon,
   FlameIcon,
@@ -10,6 +9,7 @@ import {
   SparklesIcon,
 } from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
+import { WaitlistForm } from "@/components/waitlist/waitlist-form";
 
 const MAIN_URL = process.env.NEXT_PUBLIC_MAIN_URL || "http://localhost:3001";
 
@@ -83,7 +83,7 @@ function SiteHeader() {
             <a href={`${MAIN_URL}/login`}>Sign in</a>
           </Button>
           <Button asChild size="sm" className="font-medium">
-            <a href={`${MAIN_URL}/register`}>Get started</a>
+            <Link href="/waitlist">Join waitlist</Link>
           </Button>
         </nav>
       </div>
@@ -98,7 +98,7 @@ function HeroSection() {
         <div className="flex flex-col items-center gap-6">
           <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-1 text-xs font-medium tracking-wide text-muted-foreground shadow-xs">
             <SparklesIcon className="size-3.5 text-primary" />
-            Now in alpha — invites rolling out
+            Closed alpha — join the waitlist
           </span>
           <h1 className="font-heading text-4xl leading-[1.05] font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl lg:text-7xl">
             Personal curricula,
@@ -110,24 +110,17 @@ function HeroSection() {
             modules, lessons, exercises, and quizzes—then keep you on track with
             a daily schedule, streaks, and notes that travel with you.
           </p>
-          <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">
-            <Button asChild size="lg" className="px-5 py-5 text-sm font-medium">
-              <a href={`${MAIN_URL}/register`}>
-                Start learning
-                <ArrowRightIcon className="size-4" />
-              </a>
-            </Button>
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="px-5 py-5 text-sm font-medium"
-            >
-              <a href={`${MAIN_URL}/login`}>I already have an account</a>
-            </Button>
+          <div className="mt-4 w-full max-w-xl">
+            <WaitlistForm source="homepage" cta="Get my invite" />
           </div>
           <p className="text-xs text-muted-foreground">
-            Free during alpha · Cancel anytime · No credit card required
+            Free during alpha · No credit card required ·{" "}
+            <a
+              href={`${MAIN_URL}/login`}
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              Already have an account?
+            </a>
           </p>
         </div>
         <ScreenshotFrame
@@ -253,25 +246,21 @@ function ClosingCtaSection() {
           <span className="italic text-primary">We&rsquo;ll build the curriculum.</span>
         </h2>
         <p className="max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-          Set up an account, tell Quazom your first subject, and watch a
-          complete course materialize. Your future self will be very pleased.
+          Quazom is in closed alpha. Drop your name and email and we&rsquo;ll
+          send you an invite as soon as a spot opens up.
         </p>
-        <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">
-          <Button asChild size="lg" className="px-5 py-5 text-sm font-medium">
-            <a href={`${MAIN_URL}/register`}>
-              Create your account
-              <ArrowRightIcon className="size-4" />
-            </a>
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            size="lg"
-            className="px-5 py-5 text-sm font-medium"
-          >
-            <a href={`${MAIN_URL}/login`}>Sign in</a>
-          </Button>
+        <div className="mt-2 w-full max-w-xl">
+          <WaitlistForm source="homepage" cta="Join the waitlist" />
         </div>
+        <p className="text-xs text-muted-foreground">
+          Want the full pitch first?{" "}
+          <Link
+            href="/waitlist"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Read more about the alpha →
+          </Link>
+        </p>
       </div>
     </section>
   );

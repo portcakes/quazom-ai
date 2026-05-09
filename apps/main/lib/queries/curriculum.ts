@@ -3,7 +3,7 @@ import "server-only";
 import { z } from "zod";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import prisma from "@/lib/db";
+import prisma from "@quazom-ai/db";
 import {
   curriculumObjectiveSchema,
   curriculumResourceSchema,

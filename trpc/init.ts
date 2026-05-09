@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/auth-utils';
-import prisma from '@/lib/db';
+import prisma from '@quazom-ai/db';
 import { initTRPC, TRPCError } from '@trpc/server';
 import { cache } from 'react';
  

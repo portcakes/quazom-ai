@@ -2,8 +2,8 @@ import "server-only";
 
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import prisma from "@/lib/db";
-import type { StudyTimeSlot } from "@/lib/generated/prisma/enums";
+import prisma from "@quazom-ai/db";
+import type { StudyTimeSlot } from "@quazom-ai/db/enums";
 import {
   dayKey,
   normalizeDateFromDb,

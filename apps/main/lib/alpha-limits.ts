@@ -1,6 +1,6 @@
 import "server-only";
 
-import prisma from "@/lib/db";
+import prisma from "@quazom-ai/db";
 
 /**
  * Per-user generation caps for users on the alpha plan (`User.isAlpha === true`).

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import prisma from "@/lib/db";
+import prisma from "@quazom-ai/db";
 
 /**
  * Standard auth guard for app routes. Returns the active session, redirecting

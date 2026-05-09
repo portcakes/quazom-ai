@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import prisma from "@/lib/db";
+import prisma from "@quazom-ai/db";
 import { Card, CardContent } from "@quazom-ai/ui/components/ui/card";
 import { DisabledActions } from "./disabled-actions";
 

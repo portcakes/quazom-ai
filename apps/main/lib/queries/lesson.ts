@@ -2,12 +2,12 @@ import "server-only";
 
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import prisma from "@/lib/db";
+import prisma from "@quazom-ai/db";
 import type {
   LessonActivityType,
   LessonStatus,
   ProjectType,
-} from "@/lib/generated/prisma/enums";
+} from "@quazom-ai/db/enums";
 import {
   curriculumObjectiveSchema,
   curriculumResourceSchema,

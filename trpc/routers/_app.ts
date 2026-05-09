@@ -9,7 +9,7 @@ import {
 import { inngest } from '@/inngest/client';
 import { userChannel, userChannelTopics } from '@/inngest/channels';
 import { getSubscriptionToken } from 'inngest/realtime';
-import prisma from '@/lib/db';
+import prisma from '@quazom-ai/db';
 import { NOTE_MAX_LENGTH, type QuizQuestion } from '@/inngest/schemas';
 import {
   ALPHA_LIMITS,
@@ -30,7 +30,7 @@ import {
   type StudyTimeSlot as StudyTimeSlotConst,
 } from '@/lib/schedule/time-slots';
 import { computeStreak } from '@/lib/schedule/streak';
-import type { StudyTimeSlot as PrismaStudyTimeSlot } from '@/lib/generated/prisma/enums';
+import type { StudyTimeSlot as PrismaStudyTimeSlot } from '@quazom-ai/db/enums';
 
 // Shared note input — title is optional, content is required, both length-capped
 // so a runaway client can't blow up the table.
