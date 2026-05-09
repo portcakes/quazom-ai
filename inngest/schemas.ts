@@ -160,6 +160,13 @@ export const quizContentSchema = z.object({
 });
 
 // Exercises are MC assessments — same shape as quiz, plus optional hints.
+export const exerciseQuestionSchema = z.object({
+  question: z.string().describe("The question text."),
+  answers: z.array(z.string()).describe("The answers to the question. create 15-20 answers."),
+  correctAnswerIndex: z.number().int().min(0).describe("The index of the correct answer."),
+  explanation: z.string().describe("The explanation for the correct answer.").default(""),
+});
+
 export const exerciseContentSchema = z.object({
   title: z.string(),
   description: z.string(),
@@ -168,10 +175,10 @@ export const exerciseContentSchema = z.object({
     .describe("Short paragraph telling the learner what to do.")
     .default(""),
   questions: z
-    .array(quizQuestionSchema)
-    .min(3)
-    .max(10)
-    .describe("5-10 multiple choice questions, same shape as a quiz."),
+    .array(exerciseQuestionSchema)
+    .min(15)
+    .max(20)
+    .describe("15-20 multiple choice questions, same shape as a quiz."),
   hints: z
     .array(z.string())
     .describe("Optional hints the learner can reveal.")
