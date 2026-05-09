@@ -1,8 +1,12 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import prisma from "@quazom-ai/db";
-import { polar, checkout, portal, usage, webhooks } from "@polar-sh/better-auth"; 
+import { polar, checkout, portal, usage, webhooks } from "@polar-sh/better-auth";
 import { Polar } from "@polar-sh/sdk";
+import {
+  sendEmailVerification,
+  sendPasswordReset,
+} from "@quazom-ai/emails";
 
 // Origins the Better Auth API is allowed to accept requests from. Anything not
 // in this list (matched against the browser's `Origin` header) gets a 403
@@ -14,13 +18,109 @@ const trustedOrigins = [
     "https://*.vercel.app",
 ];
 
+// First word of the user's `name` column. Templates only ever address the
+// recipient as "Hi <firstName>", so falling back to "there" keeps copy
+// natural even when names are missing or weird.
+function pickFirstName(name: string | null | undefined): string {
+    if (!name) return "there";
+    const trimmed = name.trim().split(/\s+/)[0];
+    return trimmed && trimmed.length > 0 ? trimmed : "there";
+}
+
+// Default to 60 minutes — must be kept in sync with the literal we surface
+// in the password-reset email body.
+const RESET_PASSWORD_TOKEN_TTL_SECONDS = 60 * 60;
+
 export const auth = betterAuth({
     database: prismaAdapter(prisma, {
-        provider: "postgresql", // or "mysql", "postgresql", ...etc
+        provider: "postgresql",
     }),
     emailAndPassword: {
         enabled: true,
         autoSignIn: true,
+        // Block sign-in until the email is confirmed. Better Auth will
+        // automatically re-send the verification email on each blocked sign-in
+        // attempt, so there's no separate "resend" UI to wire up.
+        requireEmailVerification: true,
+        // 1 hour. The literal in the email body is computed from this.
+        resetPasswordTokenExpiresIn: RESET_PASSWORD_TOKEN_TTL_SECONDS,
+        // Belt-and-braces: nuke any other live sessions for this user when
+        // they reset, so a stolen-cookie scenario doesn't survive a reset.
+        revokeSessionsOnPasswordReset: true,
+        sendResetPassword: async ({ user, url }) => {
+            const result = await sendPasswordReset({
+                to: user.email,
+                firstName: pickFirstName(user.name),
+                resetUrl: url,
+                expiresInMinutes: Math.round(
+                    RESET_PASSWORD_TOKEN_TTL_SECONDS / 60,
+                ),
+            });
+            if (!result.ok) {
+                console.error(
+                    "[auth] sendResetPassword failed",
+                    result.error,
+                );
+            }
+        },
+    },
+    emailVerification: {
+        // Auto-fire the verification email immediately after signup so the
+        // user never has to ask for it.
+        sendOnSignUp: true,
+        // After they click the link, drop them on /login with a flag so the
+        // page can show a "you're verified, now sign in" toast.
+        autoSignInAfterVerification: false,
+        sendVerificationEmail: async ({ user, url }) => {
+            const result = await sendEmailVerification({
+                to: user.email,
+                firstName: pickFirstName(user.name),
+                verifyUrl: url,
+            });
+            if (!result.ok) {
+                console.error(
+                    "[auth] sendVerificationEmail failed",
+                    result.error,
+                );
+            }
+        },
+    },
+    databaseHooks: {
+        user: {
+            create: {
+                // Once Better Auth finishes creating the User row, look for a
+                // live AlphaInvite for this email and mark it redeemed. If
+                // there isn't one (e.g. signup used the dev ALPHA_CODE
+                // fallback) this quietly no-ops.
+                after: async (user) => {
+                    try {
+                        const email = user.email.toLowerCase();
+                        const invite = await prisma.alphaInvite.findFirst({
+                            where: {
+                                email,
+                                redeemedAt: null,
+                                expiresAt: { gt: new Date() },
+                            },
+                            orderBy: { sentAt: "desc" },
+                            select: { id: true },
+                        });
+                        if (!invite) return;
+                        await prisma.alphaInvite.update({
+                            where: { id: invite.id },
+                            data: {
+                                redeemedAt: new Date(),
+                                redeemedByUserId: user.id,
+                            },
+                        });
+                    } catch (err) {
+                        console.error(
+                            "[auth] failed to redeem alpha invite",
+                            err,
+                        );
+                    }
+                },
+            },
+        },
     },
     trustedOrigins,
 });

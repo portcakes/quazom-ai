@@ -11,10 +11,11 @@
         "build:main": "npm --workspace apps/main run build",
         "dev:web": "npm --workspace apps/web run dev",
         "build:web": "npm --workspace apps/web run build",
-        "dev:docs": "npm --workspace apps/docs run dev",
-        "build:docs": "npm --workspace apps/docs run build",
-        "lint": "npm --workspaces run lint",
-        "dev:all": "mprocs"
+    "dev:docs": "npm --workspace apps/docs run dev",
+    "build:docs": "npm --workspace apps/docs run build",
+    "dev:emails": "npm --workspace @quazom-ai/emails run dev",
+    "lint": "npm --workspaces run lint",
+    "dev:all": "mprocs"
     },
     "devDependencies": {
         "mprocs": "^0.9.2"

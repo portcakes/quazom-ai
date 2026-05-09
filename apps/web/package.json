@@ -11,6 +11,7 @@
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@quazom-ai/db": "*",
+    "@quazom-ai/emails": "*",
     "@quazom-ai/ui": "*",
     "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",

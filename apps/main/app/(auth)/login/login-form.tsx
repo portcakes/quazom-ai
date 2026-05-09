@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -36,6 +36,7 @@ type LoginValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<LoginValues>({
@@ -46,6 +47,21 @@ export function LoginForm() {
     },
     mode: "onTouched",
   });
+
+  // Surface state we got bounced here with so the user knows what happened:
+  //   ?verify=pending  → just signed up, check inbox
+  //   ?verified=true   → just clicked the verify link, ready to sign in
+  useEffect(() => {
+    if (searchParams.get("verified") === "true") {
+      toast.success("Email verified! Sign in to get started.");
+    } else if (searchParams.get("verify") === "pending") {
+      toast.info(
+        "Almost there — check your email to verify your address before signing in.",
+      );
+    }
+    // We only want this to fire on initial mount per query change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onSubmit = async (values: LoginValues) => {
     setIsSubmitting(true);
@@ -104,7 +120,15 @@ export function LoginForm() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Password</FormLabel>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Password</FormLabel>
+                    <Link
+                      href="/forgot-password"
+                      className="text-xs font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
                   <FormControl>
                     <Input
                       type="password"

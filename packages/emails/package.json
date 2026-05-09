@@ -1,0 +1,31 @@
+{
+  "name": "@quazom-ai/emails",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./templates/*": "./src/templates/*.tsx"
+  },
+  "scripts": {
+    "dev": "email dev --dir src/templates --port 3003",
+    "export": "email export --dir src/templates",
+    "lint": "echo \"No lint configured for @quazom-ai/emails\""
+  },
+  "dependencies": {
+    "react-email": "^6.1.1",
+    "resend": "^6.12.3"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@react-email/ui": "^6.1.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "typescript": "^5"
+  }
+}

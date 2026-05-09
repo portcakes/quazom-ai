@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -27,6 +27,7 @@ import {
 import { Input } from "@quazom-ai/ui/components/ui/input";
 import { Spinner } from "@quazom-ai/ui/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
+import { validateAlphaAccessKey } from "@/lib/alpha-invites";
 
 const registerSchema = z
   .object({
@@ -34,21 +35,25 @@ const registerSchema = z
     email: z.email("Please enter a valid email address."),
     password: z.string().min(8, "Password must be at least 8 characters."),
     confirmPassword: z.string(),
-    alphaCode: z.string().optional(),
+    alphaCode: z
+      .string()
+      .trim()
+      .min(1, "Please enter your alpha access key."),
   })
   .refine((data) => data.password === data.confirmPassword, {
-      message: "Passwords do not match.",
-      path: ["confirmPassword"],
-    })
-    .refine((data) => data.alphaCode === process.env.ALPHA_CODE, {
-      message: "Invalid alpha code.",
-      path: ["alphaCode"],
-    });
+    message: "Passwords do not match.",
+    path: ["confirmPassword"],
+  });
 
 type RegisterValues = z.infer<typeof registerSchema>;
 
 export function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Pre-fill the alpha code when the user arrives from an invite email
+  // (`/register?key=QUAZOM-XXXX-XXXX-XXXX`), so they don't have to copy
+  // it themselves.
+  const prefilledKey = searchParams.get("key") ?? "";
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<RegisterValues>({
@@ -58,7 +63,7 @@ export function RegisterForm() {
       email: "",
       password: "",
       confirmPassword: "",
-      alphaCode: "",
+      alphaCode: prefilledKey,
     },
     mode: "onTouched",
   });
@@ -66,17 +71,42 @@ export function RegisterForm() {
   const onSubmit = async (values: RegisterValues) => {
     setIsSubmitting(true);
 
+    // Validate the alpha key against the AlphaInvite table *before* asking
+    // Better Auth to create the user. The key is bound to a specific email,
+    // so a stray reuse fails here without ever creating a row. After signup,
+    // the auth `user.create.after` hook marks the matching invite redeemed.
+    const validation = await validateAlphaAccessKey({
+      email: values.email,
+      accessKey: values.alphaCode,
+    });
+    if (!validation.ok) {
+      form.setError("alphaCode", { message: validation.error });
+      setIsSubmitting(false);
+      return;
+    }
+
+    // The callbackURL is what Better Auth appends to the verification email
+    // link, so the user lands on /login with a "verified, please sign in"
+    // toast after they click it.
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : "";
+
     await authClient.signUp.email(
       {
         name: values.name,
         email: values.email,
         password: values.password,
-        callbackURL: "/",
+        callbackURL: `${origin}/login?verified=true`,
       },
       {
         onSuccess: () => {
-          toast.success("Welcome to Quazom!");
-          router.push("/");
+          toast.success(
+            "Welcome to Quazom! Check your email to verify your address.",
+          );
+          // requireEmailVerification is on, so even if Better Auth created
+          // a session the next protected route bounces them to /login. Send
+          // them straight there.
+          router.push("/login?verify=pending");
           router.refresh();
         },
         onError: (error) => {
@@ -178,15 +208,20 @@ export function RegisterForm() {
               name="alphaCode"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Alpha code</FormLabel>
+                  <FormLabel>Alpha access key</FormLabel>
                   <FormControl>
                     <Input
                       type="text"
-                      autoComplete="alpha-code"
+                      autoComplete="off"
                       disabled={isSubmitting}
+                      placeholder="QUAZOM-XXXX-XXXX-XXXX"
                       {...field}
                     />
                   </FormControl>
+                  <FormDescription>
+                    The unique key from your invite email. Bound to the
+                    email address you signed up with.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

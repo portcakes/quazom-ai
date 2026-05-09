@@ -460,16 +460,59 @@ model AccountFeedback {
 // (apps/web). Email is unique so re-submissions just bump `updatedAt`. We
 // optionally record the page the signup came from (`source`) so we can tell
 // homepage CTA conversions apart from the dedicated /waitlist page.
+//
+// `welcomeEmailSentAt` lets the server action skip re-sending the welcome on
+// duplicate submits, and `invitedAt` is set by the weekly invite cron so
+// subsequent runs ignore already-invited entries.
 model WaitlistEntry {
-  id        String   @id
-  firstName String
-  email     String
-  source    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String        @id
+  firstName          String
+  email              String
+  source             String?
+  welcomeEmailSentAt DateTime?
+  invitedAt          DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  invites            AlphaInvite[]
 
   @@unique([email])
+  @@index([invitedAt])
   @@map("waitlist_entry")
+}
+
+// Per-email alpha access keys minted by the weekly invite cron. Replaces the
+// old single `ALPHA_CODE` env-var model: each row binds a single-use,
+// expiring `accessKey` to one waitlist email so the marketing site can roll
+// out invites in waves and keys can rotate (revoke + re-issue) per user.
+//
+// `email` is *not* a foreign key to User — invites are minted before the
+// user account exists. `redeemedByUserId` is filled in once the user
+// successfully registers with this key.
+model AlphaInvite {
+  id               String         @id
+  // Lower-case email for case-insensitive lookups; matches WaitlistEntry.email.
+  email            String
+  // Opaque, URL-safe, unique. The user pastes / clicks-through this to
+  // unlock the registration form.
+  accessKey        String         @unique
+  // FK back to the waitlist row. Nullable so an admin can hand-mint keys
+  // for emails that never went through the marketing site.
+  waitlistEntryId  String?
+  waitlistEntry    WaitlistEntry? @relation(fields: [waitlistEntryId], references: [id], onDelete: SetNull)
+  // When the invite email was actually delivered to Resend.
+  sentAt           DateTime?
+  // After this point the key stops working and the user must request a new
+  // one. Defaults set by the cron (typically 14 days out).
+  expiresAt        DateTime
+  // Set when the user successfully signs up using this key.
+  redeemedAt       DateTime?
+  redeemedByUserId String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([email])
+  @@index([expiresAt])
+  @@map("alpha_invite")
 }
 
 // Daily check-ins. Streak is derived from these rows (no denormalised counter
