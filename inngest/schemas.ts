@@ -317,4 +317,10 @@ export function dbToActivityType(
   }
 }
 
-export const NOTE_MAX_LENGTH = 5000;
+// Notes now hold rich markdown plus accumulated annotation quotes, so the
+// per-note ceiling is more generous. Still capped to keep the column from
+// growing without bound.
+export const NOTE_MAX_LENGTH = 20000;
+export const NOTE_DESCRIPTION_MAX_LENGTH = 500;
+export const ANNOTATION_QUOTE_MAX_LENGTH = 2000;
+export const ANNOTATION_TEXT_MAX_LENGTH = 2000;

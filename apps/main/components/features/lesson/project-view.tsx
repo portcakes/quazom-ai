@@ -11,6 +11,8 @@ import { Label } from "@quazom-ai/ui/components/ui/label";
 import { Badge } from "@quazom-ai/ui/components/ui/badge";
 import { useTRPC } from "@/trpc/client";
 import type { LessonDetail } from "@/lib/queries/lesson";
+import { Highlightable } from "./highlightable";
+import { LessonNotesPanel } from "./lesson-notes-panel";
 
 type Props = {
   lesson: LessonDetail;
@@ -39,6 +41,10 @@ export function ProjectView({ lesson }: Props) {
   const embedUrl = toEmbeddable(project.submissionUrl);
 
   return (
+    <Highlightable
+      lessonId={lesson.id}
+      curriculumId={lesson.module.curriculum.id}
+    >
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card/60 p-5">
         <div className="flex items-center justify-between gap-3">
@@ -138,7 +144,13 @@ export function ProjectView({ lesson }: Props) {
           </div>
         ) : null}
       </section>
+
+      <LessonNotesPanel
+        lessonId={lesson.id}
+        curriculumId={lesson.module.curriculum.id}
+      />
     </div>
+    </Highlightable>
   );
 }
 

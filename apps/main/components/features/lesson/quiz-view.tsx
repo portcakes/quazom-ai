@@ -15,6 +15,7 @@ import { RadioGroup, RadioGroupItem } from "@quazom-ai/ui/components/ui/radio-gr
 import { Label } from "@quazom-ai/ui/components/ui/label";
 import { useTRPC } from "@/trpc/client";
 import type { LessonDetail } from "@/lib/queries/lesson";
+import { Highlightable } from "./highlightable";
 import { LessonNotesPanel } from "./lesson-notes-panel";
 
 type Props = {
@@ -115,6 +116,10 @@ function QuizForm({ lesson, data, kind, hints, description }: FormProps) {
   };
 
   return (
+    <Highlightable
+      lessonId={lesson.id}
+      curriculumId={lesson.module.curriculum.id}
+    >
     <div className="flex flex-col gap-8">
       {description ? (
         <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
@@ -234,6 +239,7 @@ function QuizForm({ lesson, data, kind, hints, description }: FormProps) {
         curriculumId={lesson.module.curriculum.id}
       />
     </div>
+    </Highlightable>
   );
 }
 

@@ -19,6 +19,7 @@ export function CurriculumNotesTab({ curriculumId }: Props) {
       <NotesGrid
         curriculumId={curriculumId}
         newNoteCurriculumId={curriculumId}
+        useBottomSheet
         emptyTitle="No notes for this curriculum yet"
         emptyDescription="Take notes inside lessons or jot something here — they all show up in this tab."
       />

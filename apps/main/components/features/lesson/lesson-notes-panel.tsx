@@ -34,6 +34,7 @@ export function LessonNotesPanel({
         newNoteCurriculumId={curriculumId}
         singleColumn
         hideSearch
+        useBottomSheet
         emptyTitle="No notes for this lesson"
         emptyDescription="Capture a question, observation, or summary as you work through it."
       />

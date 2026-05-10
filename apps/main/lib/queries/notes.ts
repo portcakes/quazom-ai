@@ -7,7 +7,9 @@ import prisma from "@quazom-ai/db";
 export type NoteSummary = {
   id: string;
   title: string | null;
+  description: string | null;
   content: string;
+  isAnnotation: boolean;
   lessonId: string | null;
   curriculumId: string | null;
   createdAt: Date;
@@ -75,7 +77,9 @@ export async function getUserNotes(opts: ListOptions = {}): Promise<NoteSummary[
   return rows.map((row) => ({
     id: row.id,
     title: row.title,
+    description: row.description,
     content: row.content,
+    isAnnotation: row.isAnnotation,
     lessonId: row.lessonId,
     curriculumId: row.curriculumId,
     createdAt: row.createdAt,
@@ -92,4 +96,73 @@ export async function getUserNotes(opts: ListOptions = {}): Promise<NoteSummary[
       ? { id: row.curriculum.id, title: row.curriculum.title }
       : null,
   }));
+}
+
+export type NoteDetail = NoteSummary & {
+  prevId: string | null;
+  nextId: string | null;
+};
+
+/**
+ * Fetches a single note by id, scoped to the current user, plus the
+ * neighbouring note ids in the user's reverse-chronological order. Returns
+ * null when the note doesn't exist or belongs to another user — the page
+ * uses this to drive a `notFound()` so non-owners get a 404, not a 403.
+ */
+export async function getNoteForCurrentUser(
+  noteId: string,
+): Promise<NoteDetail | null> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return null;
+
+  const note = await prisma.note.findFirst({
+    where: { id: noteId, userId: session.user.id },
+    include: {
+      lesson: {
+        select: {
+          id: true,
+          title: true,
+          moduleId: true,
+          module: { select: { curriculumId: true } },
+        },
+      },
+      curriculum: { select: { id: true, title: true } },
+    },
+  });
+  if (!note) return null;
+
+  const ordered = await prisma.note.findMany({
+    where: { userId: session.user.id },
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    select: { id: true },
+  });
+  const idx = ordered.findIndex((n) => n.id === note.id);
+  const prevId = idx > 0 ? ordered[idx - 1]!.id : null;
+  const nextId =
+    idx >= 0 && idx < ordered.length - 1 ? ordered[idx + 1]!.id : null;
+
+  return {
+    id: note.id,
+    title: note.title,
+    description: note.description,
+    content: note.content,
+    isAnnotation: note.isAnnotation,
+    lessonId: note.lessonId,
+    curriculumId: note.curriculumId,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
+    lesson: note.lesson
+      ? {
+          id: note.lesson.id,
+          title: note.lesson.title,
+          moduleId: note.lesson.moduleId,
+          curriculumId: note.lesson.module.curriculumId,
+        }
+      : null,
+    curriculum: note.curriculum
+      ? { id: note.curriculum.id, title: note.curriculum.title }
+      : null,
+    prevId,
+    nextId,
+  };
 }

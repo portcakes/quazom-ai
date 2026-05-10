@@ -11,6 +11,7 @@ import { Textarea } from "@quazom-ai/ui/components/ui/textarea";
 import { useTRPC, useTRPCClient } from "@/trpc/client";
 import { userChannel } from "@/inngest/channels";
 import type { LessonDetail, LessonChatMessage } from "@/lib/queries/lesson";
+import { Highlightable } from "./highlightable";
 
 type Props = {
   lesson: LessonDetail;
@@ -94,6 +95,10 @@ export function DiscussionView({ lesson, userId }: Props) {
       : "Follow up with one final reply… (⌘/Ctrl + Enter to send)";
 
   return (
+    <Highlightable
+      lessonId={lesson.id}
+      curriculumId={lesson.module.curriculum.id}
+    >
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
         <div className="flex items-center justify-between gap-3">
@@ -199,6 +204,7 @@ export function DiscussionView({ lesson, userId }: Props) {
         </form>
       </section>
     </div>
+    </Highlightable>
   );
 }
 

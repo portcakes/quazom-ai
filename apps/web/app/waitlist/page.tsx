@@ -89,7 +89,7 @@ export default function WaitlistPage() {
 
 function SiteHeader() {
   return (
-    <header className="sticky top-0 z-30 border-b border-border/50 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+    <header className="sticky top-0 z-30 border-b border-border/50 bg-background/85 backdrop-blur supports-backdrop-filter:bg-background/70">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4 sm:py-5">
         <Link
           href="/"
@@ -115,7 +115,7 @@ function SiteHeader() {
 
 function HeroSection() {
   return (
-    <section className="relative overflow-hidden border-b border-border/60 bg-gradient-to-b from-muted/40 via-background to-background">
+    <section className="relative overflow-hidden border-b border-border/60 bg-linear-to-b from-muted/40 via-background to-background">
       <div className="mx-auto grid w-full max-w-6xl gap-12 px-6 pt-16 pb-16 md:grid-cols-[1.05fr_1fr] md:gap-16 md:pt-24 md:pb-24">
         <div className="flex flex-col gap-6">
           <span className="inline-flex w-fit items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-1 text-xs font-medium tracking-wide text-muted-foreground shadow-xs">

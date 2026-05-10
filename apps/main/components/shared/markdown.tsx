@@ -2,6 +2,8 @@
 
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import type { Pluggable } from "unified";
 import { cn } from "@quazom-ai/ui/lib/utils";
 
 type Props = {
@@ -9,7 +11,23 @@ type Props = {
   className?: string;
   /** Smaller scale for tight contexts (overviews, hover cards, etc.). */
   compact?: boolean;
+  /**
+   * Allow a small set of inline HTML tags (currently `<u>` for underline).
+   * Use this for content the *user* authored (e.g. notes), never for
+   * model-emitted lesson content where a runaway tag could escape.
+   */
+  allowInlineHtml?: boolean;
+  /** Optional override for the components map — extend, don't replace. */
+  componentsOverride?: Partial<Components>;
+  /** Optional extra rehype plugins (e.g. annotation injector). */
+  rehypePluginsExtra?: Pluggable[];
 };
+
+// Keep underline limited to a single inline tag the editor toolbar emits.
+// We intentionally do *not* enable rehype-sanitize here because we don't
+// surface model output through this codepath; user-authored notes go through
+// our own length cap + the sanitizing default of react-markdown.
+const ALLOWED_RAW_TAGS = new Set(["u"]);
 
 /**
  * Renders markdown using design-system tokens instead of @tailwindcss/typography.
@@ -17,9 +35,18 @@ type Props = {
  * the rest of the lesson chrome.
  *
  * Treats markdown as untrusted content: we don't enable raw HTML so a
- * model-emitted `<script>` can't sneak through.
+ * model-emitted `<script>` can't sneak through. Pass `allowInlineHtml` to
+ * opt in for user-authored content where the markdown editor's underline
+ * button needs to round-trip through `<u>...</u>`.
  */
-export function Markdown({ children, className, compact = false }: Props) {
+export function Markdown({
+  children,
+  className,
+  compact = false,
+  allowInlineHtml = false,
+  componentsOverride,
+  rehypePluginsExtra,
+}: Props) {
   const headingFont = "font-heading font-semibold tracking-tight";
   return (
     <div
@@ -31,6 +58,11 @@ export function Markdown({ children, className, compact = false }: Props) {
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[
+          ...(allowInlineHtml ? [rehypeRaw as Pluggable] : []),
+          ...(rehypePluginsExtra ?? []),
+        ]}
+        urlTransform={(url) => url}
         components={
           {
             h1: ({ children: c, ...props }) => (
@@ -206,8 +238,63 @@ export function Markdown({ children, className, compact = false }: Props) {
                 {c}
               </em>
             ),
+            // Underline lives behind `allowInlineHtml`; rehype-raw passes the
+            // raw <u> through so this component runs.
+            u: ({ children: c, ...props }) => (
+              <u
+                {...props}
+                className="underline decoration-foreground/40 underline-offset-4"
+              >
+                {c}
+              </u>
+            ),
+            ...(componentsOverride ?? {}),
           } satisfies Components
         }
+        // Skip every other raw HTML node — only the explicit allowlist above
+        // gets through when allowInlineHtml is on.
+        skipHtml={!allowInlineHtml}
+        allowedElements={undefined}
+        unwrapDisallowed={true}
+        allowElement={(element) => {
+          if (!allowInlineHtml) return true;
+          const tag = element?.tagName;
+          if (typeof tag !== "string") return true;
+          // Block raw HTML elements that aren't on the allowlist while still
+          // letting all the markdown-derived nodes through (those are
+          // handled by react-markdown directly, not via rehype-raw).
+          if (element.type === "element" && /^[a-z][a-z0-9]*$/i.test(tag)) {
+            // Markdown-mapped tags we handle via the components map above.
+            const ours = new Set([
+              "h1",
+              "h2",
+              "h3",
+              "h4",
+              "h5",
+              "h6",
+              "p",
+              "a",
+              "ul",
+              "ol",
+              "li",
+              "blockquote",
+              "hr",
+              "code",
+              "pre",
+              "table",
+              "thead",
+              "tbody",
+              "tr",
+              "th",
+              "td",
+              "strong",
+              "em",
+            ]);
+            if (ours.has(tag)) return true;
+            return ALLOWED_RAW_TAGS.has(tag);
+          }
+          return true;
+        }}
       >
         {children}
       </ReactMarkdown>

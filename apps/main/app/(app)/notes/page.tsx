@@ -21,8 +21,8 @@ export default async function NotesPage() {
           </p>
         </div>
       </section>
-      <section className="mx-auto w-full max-w-5xl px-6 py-8">
-        <NotesGrid />
+      <section className="mx-auto w-full max-w-6xl px-6 py-8">
+        <NotesGrid useBottomSheet />
       </section>
     </div>
   );

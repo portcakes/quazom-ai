@@ -10,7 +10,15 @@ import { inngest } from '@/inngest/client';
 import { userChannel, userChannelTopics } from '@/inngest/channels';
 import { getSubscriptionToken } from 'inngest/realtime';
 import prisma from '@quazom-ai/db';
-import { NOTE_MAX_LENGTH, type QuizQuestion } from '@/inngest/schemas';
+import {
+  ANNOTATION_QUOTE_MAX_LENGTH,
+  ANNOTATION_TEXT_MAX_LENGTH,
+  NOTE_DESCRIPTION_MAX_LENGTH,
+  NOTE_MAX_LENGTH,
+  type QuizQuestion,
+} from '@/inngest/schemas';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { generateObject } from 'ai';
 import {
   ALPHA_LIMITS,
   countCurriculaForUser,
@@ -32,11 +40,33 @@ import {
 import { computeStreak } from '@/lib/schedule/streak';
 import type { StudyTimeSlot as PrismaStudyTimeSlot } from '@quazom-ai/db/enums';
 
-// Shared note input — title is optional, content is required, both length-capped
-// so a runaway client can't blow up the table.
+// Shared note input — title and description are optional, content is required,
+// all three length-capped so a runaway client can't blow up the table.
 const noteInputBase = z.object({
   title: z.string().max(120).optional(),
+  description: z.string().max(NOTE_DESCRIPTION_MAX_LENGTH).optional(),
   content: z.string().min(1, 'Content is required').max(NOTE_MAX_LENGTH),
+});
+
+// Lazy-initialised Google client. The SDK reads GOOGLE_GENERATIVE_AI_API_KEY
+// from env on first use; we allocate at module load time so the client is
+// reused across requests in the same lambda.
+const googleClient = createGoogleGenerativeAI();
+const SUMMARIZE_MODEL = 'gemini-2.5-flash-lite';
+
+const summarizeNoteSchema = z.object({
+  title: z
+    .string()
+    .min(1)
+    .max(80)
+    .describe('A concise, specific title for the note. Max ~10 words.'),
+  description: z
+    .string()
+    .min(1)
+    .max(NOTE_DESCRIPTION_MAX_LENGTH)
+    .describe(
+      'A 1-2 sentence summary capturing the gist of the note. Max ~280 characters.',
+    ),
 });
 
 // Shared schedule input. Used by both `previewSchedule` and `upsertSchedule`.
@@ -513,6 +543,7 @@ export const appRouter = createTRPCRouter({
           id: crypto.randomUUID(),
           userId: ctx.userId,
           title: input.title?.trim() || null,
+          description: input.description?.trim() || null,
           content: input.content,
           lessonId: input.lessonId ?? null,
           curriculumId: input.curriculumId ?? null,
@@ -525,6 +556,11 @@ export const appRouter = createTRPCRouter({
       z.object({
         id: z.string(),
         title: z.string().max(120).nullable().optional(),
+        description: z
+          .string()
+          .max(NOTE_DESCRIPTION_MAX_LENGTH)
+          .nullable()
+          .optional(),
         content: z.string().min(1).max(NOTE_MAX_LENGTH).optional(),
       }),
     )
@@ -533,11 +569,247 @@ export const appRouter = createTRPCRouter({
         where: { id: input.id, userId: ctx.userId },
         data: {
           ...(input.title !== undefined ? { title: input.title?.trim() || null } : {}),
+          ...(input.description !== undefined
+            ? { description: input.description?.trim() || null }
+            : {}),
           ...(input.content !== undefined ? { content: input.content } : {}),
         },
       });
       if (result.count === 0) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Note not found' });
+      }
+      return { ok: true };
+    }),
+  // Single-note fetch for the dedicated /notes/[id] page. Includes the
+  // surrounding ordered note ids (prev/next) so the page can render its
+  // navigation arrows in one round trip and stay enforced server-side.
+  getNote: protectedcProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const note = await prisma.note.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        include: {
+          lesson: {
+            select: {
+              id: true,
+              title: true,
+              moduleId: true,
+              module: { select: { curriculumId: true } },
+            },
+          },
+          curriculum: { select: { id: true, title: true } },
+        },
+      });
+      if (!note) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Note not found' });
+      }
+
+      // Order matches the notes grid (most recently updated first), so prev =
+      // newer note and next = older note.
+      const ordered = await prisma.note.findMany({
+        where: { userId: ctx.userId },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        select: { id: true },
+      });
+      const idx = ordered.findIndex((n) => n.id === note.id);
+      const prevId = idx > 0 ? ordered[idx - 1]!.id : null;
+      const nextId = idx >= 0 && idx < ordered.length - 1 ? ordered[idx + 1]!.id : null;
+
+      return {
+        id: note.id,
+        title: note.title,
+        description: note.description,
+        content: note.content,
+        isAnnotation: note.isAnnotation,
+        lessonId: note.lessonId,
+        curriculumId: note.curriculumId,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+        lesson: note.lesson
+          ? {
+              id: note.lesson.id,
+              title: note.lesson.title,
+              curriculumId: note.lesson.module.curriculumId,
+            }
+          : null,
+        curriculum: note.curriculum
+          ? { id: note.curriculum.id, title: note.curriculum.title }
+          : null,
+        prevId,
+        nextId,
+      };
+    }),
+  // AI-generated title + description for a note. Available even when the user
+  // already supplied their own — they can re-roll until they like the result.
+  summarizeNote: activeUserProcedure
+    .input(
+      z.object({
+        // Either a saved note (we'll load the canonical content) or an
+        // ad-hoc draft from the editor.
+        id: z.string().optional(),
+        content: z.string().min(1).max(NOTE_MAX_LENGTH).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      let content = input.content?.trim() ?? '';
+      if (!content && input.id) {
+        const note = await prisma.note.findFirst({
+          where: { id: input.id, userId: ctx.userId },
+          select: { content: true },
+        });
+        if (!note) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Note not found' });
+        }
+        content = note.content;
+      }
+      if (!content) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Provide note content to summarize.',
+        });
+      }
+
+      const result = await generateObject({
+        model: googleClient(SUMMARIZE_MODEL),
+        schema: summarizeNoteSchema,
+        system:
+          'You write tight, specific titles and 1-2 sentence descriptions for personal study notes. Stay grounded in the note content; do not invent facts. Title is concise (no trailing punctuation). Description is plain prose.',
+        prompt: `Summarize the following study note. Return a title and a 1-2 sentence description.\n\n---\n${content}\n---`,
+      });
+      const parsed = summarizeNoteSchema.parse(result.object);
+      return parsed;
+    }),
+
+  // ---------------------------------------------------------------------
+  // Annotations (highlight + commentary on a lesson passage)
+  // ---------------------------------------------------------------------
+  listAnnotations: protectedcProcedure
+    .input(z.object({ lessonId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const owns = await prisma.lesson.findFirst({
+        where: { id: input.lessonId, module: { curriculum: { userId: ctx.userId } } },
+        select: { id: true },
+      });
+      if (!owns) return [];
+      const rows = await prisma.annotation.findMany({
+        where: { userId: ctx.userId, lessonId: input.lessonId },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          quote: true,
+          annotation: true,
+          noteId: true,
+          createdAt: true,
+        },
+      });
+      return rows;
+    }),
+  createAnnotation: activeUserProcedure
+    .input(
+      z.object({
+        lessonId: z.string(),
+        quote: z.string().min(1).max(ANNOTATION_QUOTE_MAX_LENGTH),
+        annotation: z.string().min(1).max(ANNOTATION_TEXT_MAX_LENGTH),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const lesson = await prisma.lesson.findFirst({
+        where: { id: input.lessonId, module: { curriculum: { userId: ctx.userId } } },
+        select: {
+          id: true,
+          title: true,
+          module: { select: { curriculumId: true } },
+        },
+      });
+      if (!lesson) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Lesson not found' });
+      }
+
+      // Find or create the user's auto-managed annotation note for this
+      // lesson. Re-using one row keeps the user's notes page tidy and lets
+      // hover-card lookups join annotations → note in a single query.
+      const existing = await prisma.note.findFirst({
+        where: {
+          userId: ctx.userId,
+          lessonId: lesson.id,
+          isAnnotation: true,
+        },
+        select: { id: true },
+      });
+      let noteId = existing?.id;
+      if (!noteId) {
+        const created = await prisma.note.create({
+          data: {
+            id: crypto.randomUUID(),
+            userId: ctx.userId,
+            lessonId: lesson.id,
+            curriculumId: lesson.module.curriculumId,
+            isAnnotation: true,
+            title: `Annotations · ${lesson.title}`,
+            description: `Highlights and commentary you saved while working through "${lesson.title}".`,
+            content: '',
+          },
+          select: { id: true },
+        });
+        noteId = created.id;
+      }
+
+      const annotation = await prisma.annotation.create({
+        data: {
+          id: crypto.randomUUID(),
+          userId: ctx.userId,
+          lessonId: lesson.id,
+          noteId,
+          quote: input.quote,
+          annotation: input.annotation,
+        },
+      });
+
+      await rebuildAnnotationNoteContent(noteId);
+      return { annotationId: annotation.id, noteId };
+    }),
+  updateAnnotation: activeUserProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        annotation: z.string().min(1).max(ANNOTATION_TEXT_MAX_LENGTH),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existing = await prisma.annotation.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: { id: true, noteId: true },
+      });
+      if (!existing) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Annotation not found' });
+      }
+      await prisma.annotation.update({
+        where: { id: existing.id },
+        data: { annotation: input.annotation },
+      });
+      await rebuildAnnotationNoteContent(existing.noteId);
+      return { ok: true };
+    }),
+  deleteAnnotation: protectedcProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await prisma.annotation.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: { id: true, noteId: true },
+      });
+      if (!existing) return { ok: true };
+      await prisma.annotation.delete({ where: { id: existing.id } });
+      const remaining = await prisma.annotation.count({
+        where: { noteId: existing.noteId },
+      });
+      if (remaining === 0) {
+        // No annotations left → drop the auto-note so the user's notes list
+        // stays clean.
+        await prisma.note.deleteMany({
+          where: { id: existing.noteId, isAnnotation: true },
+        });
+      } else {
+        await rebuildAnnotationNoteContent(existing.noteId);
       }
       return { ok: true };
     }),
@@ -594,7 +866,9 @@ export const appRouter = createTRPCRouter({
       return rows.map((row) => ({
         id: row.id,
         title: row.title,
+        description: row.description,
         content: row.content,
+        isAnnotation: row.isAnnotation,
         lessonId: row.lessonId,
         curriculumId: row.curriculumId,
         createdAt: row.createdAt,
@@ -1131,6 +1405,29 @@ async function buildPreview(userId: string, input: ScheduleInput) {
       blockingCurricula,
     },
   };
+}
+
+// Rebuilds the markdown body of an annotation note from its annotations,
+// in chronological order. Each annotation renders as `> quote\n\n— commentary`
+// separated by `---` so the note reads like a clean reading log.
+async function rebuildAnnotationNoteContent(noteId: string): Promise<void> {
+  const annotations = await prisma.annotation.findMany({
+    where: { noteId },
+    orderBy: { createdAt: 'asc' },
+    select: { quote: true, annotation: true },
+  });
+  const blocks = annotations.map((a) => {
+    const quoted = a.quote
+      .split('\n')
+      .map((line) => `> ${line}`)
+      .join('\n');
+    return `${quoted}\n\n${a.annotation}`;
+  });
+  const content = blocks.join('\n\n---\n\n');
+  await prisma.note.update({
+    where: { id: noteId },
+    data: { content: content.length > 0 ? content : '_No annotations yet._' },
+  });
 }
 
 function dateToDayKey(date: Date): string {

@@ -1,13 +1,14 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { CheckIcon, SearchIcon } from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { Badge } from "@quazom-ai/ui/components/ui/badge";
 import { useTRPC } from "@/trpc/client";
 import type { LessonDetail } from "@/lib/queries/lesson";
-import { Markdown } from "@/components/shared/markdown";
+import { AnnotatedMarkdown } from "@/components/features/notes/annotated-markdown";
+import { Highlightable } from "./highlightable";
 import { LessonNotesPanel } from "./lesson-notes-panel";
 
 type Props = {
@@ -23,25 +24,39 @@ export function ReadingView({ lesson }: Props) {
       onSuccess: () => router.refresh(),
     }),
   );
+  const annotationsQuery = useQuery(
+    trpc.listAnnotations.queryOptions({ lessonId: lesson.id }),
+  );
+  const annotations = annotationsQuery.data ?? [];
 
   if (!reading) {
     return <p className="text-sm text-muted-foreground">No reading content available.</p>;
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      {reading.overview ? (
-        <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
-          <h2 className="font-heading text-lg font-semibold">Overview</h2>
-          <Markdown compact className="text-muted-foreground">
-            {reading.overview}
-          </Markdown>
-        </section>
-      ) : null}
+    <Highlightable
+      lessonId={lesson.id}
+      curriculumId={lesson.module.curriculum.id}
+    >
+      <div className="flex flex-col gap-8">
+        {reading.overview ? (
+          <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
+            <h2 className="font-heading text-lg font-semibold">Overview</h2>
+            <AnnotatedMarkdown
+              compact
+              className="text-muted-foreground"
+              annotations={annotations}
+            >
+              {reading.overview}
+            </AnnotatedMarkdown>
+          </section>
+        ) : null}
 
-      <article className="max-w-none">
-        <Markdown>{reading.content}</Markdown>
-      </article>
+        <article className="max-w-none">
+          <AnnotatedMarkdown annotations={annotations}>
+            {reading.content}
+          </AnnotatedMarkdown>
+        </article>
 
       {reading.recommendedResources.length > 0 ? (
         <section className="flex flex-col gap-3">
@@ -92,10 +107,11 @@ export function ReadingView({ lesson }: Props) {
         </Button>
       </div>
 
-      <LessonNotesPanel
-        lessonId={lesson.id}
-        curriculumId={lesson.module.curriculum.id}
-      />
-    </div>
+        <LessonNotesPanel
+          lessonId={lesson.id}
+          curriculumId={lesson.module.curriculum.id}
+        />
+      </div>
+    </Highlightable>
   );
 }

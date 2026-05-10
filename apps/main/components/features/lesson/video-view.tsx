@@ -7,6 +7,8 @@ import { Button } from "@quazom-ai/ui/components/ui/button";
 import { useTRPC } from "@/trpc/client";
 import type { LessonDetail } from "@/lib/queries/lesson";
 import { Markdown } from "@/components/shared/markdown";
+import { Highlightable } from "./highlightable";
+import { LessonNotesPanel } from "./lesson-notes-panel";
 
 type Props = {
   lesson: LessonDetail;
@@ -30,6 +32,10 @@ export function VideoView({ lesson }: Props) {
   const externalUrl = video.externalUrl || video.embedUrl;
 
   return (
+    <Highlightable
+      lessonId={lesson.id}
+      curriculumId={lesson.module.curriculum.id}
+    >
     <div className="flex flex-col gap-8">
       {video.overview ? (
         <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
@@ -98,7 +104,13 @@ export function VideoView({ lesson }: Props) {
           {video.isCompleted ? "Marked as watched" : "Mark as watched"}
         </Button>
       </div>
+
+      <LessonNotesPanel
+        lessonId={lesson.id}
+        curriculumId={lesson.module.curriculum.id}
+      />
     </div>
+    </Highlightable>
   );
 }
 
