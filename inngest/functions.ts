@@ -14,6 +14,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateObject, generateText } from "ai";
 import prisma from "@quazom-ai/db";
 import { sendAlphaInvite } from "@quazom-ai/emails";
+import { recordAiUsage } from "./ai-usage";
 
 const google = createGoogleGenerativeAI();
 const MODEL = "gemini-2.5-flash-lite";
@@ -86,6 +87,16 @@ Learner goal: ${event.data.goal}
 
 Sequence modules from foundational to advanced. Each lesson must have a concrete activityType. Recommended resources should be high-quality and reputable.`,
     });
+
+    await step.run("record-curriculum-usage", () =>
+      recordAiUsage({
+        userId: event.data.userId,
+        kind: "CURRICULUM",
+        model: MODEL,
+        result,
+        resourceId: event.data.id,
+      }),
+    );
 
     // step.ai.wrap serializes through JSON, so the schema generic is lost.
     // Re-parse to recover the typed Curriculum and validate at runtime.
@@ -240,6 +251,16 @@ Constraints:
       },
     );
 
+    await step.run("record-backfill-usage", () =>
+      recordAiUsage({
+        userId,
+        kind: "CURRICULUM_BACKFILL",
+        model: MODEL,
+        result,
+        resourceId: curriculumId,
+      }),
+    );
+
     const parsed = modulesBackfillSchema.parse(
       (result as { object: unknown }).object,
     );
@@ -390,6 +411,15 @@ export const generateLesson = inngest.createFunction(
           "You are an expert instructional designer. Generate one complete lesson. Populate the `base` field always, plus exactly the one child field that matches the requested activity type. Do not populate child fields that were not requested. Be concrete, accurate, and avoid filler.",
         prompt,
       });
+      await step.run("record-lesson-usage", () =>
+        recordAiUsage({
+          userId,
+          kind: "LESSON",
+          model: MODEL,
+          result,
+          resourceId: lessonId,
+        }),
+      );
       generated = lessonGenerationSchema.parse(
         (result as { object: unknown }).object,
       );
@@ -608,6 +638,16 @@ Per-question results:
 ${summaryLines.join("\n")}`,
     });
 
+    await step.run("record-grade-usage", () =>
+      recordAiUsage({
+        userId,
+        kind: "SUBMISSION_FEEDBACK",
+        model: MODEL,
+        result,
+        resourceId: id,
+      }),
+    );
+
     const feedback = submissionFeedbackSchema.parse(
       (result as { object: unknown }).object,
     );
@@ -689,6 +729,16 @@ Objectives: ${objectivesText}
 ${turnInstruction}`,
       messages: history.map((m) => ({ role: m.role, content: m.content })),
     });
+
+    await step.run("record-discussion-reply-usage", () =>
+      recordAiUsage({
+        userId,
+        kind: "DISCUSSION_REPLY",
+        model: MODEL,
+        result: reply,
+        resourceId: discussionId,
+      }),
+    );
 
     const reply_text = (reply as { text: string }).text;
 

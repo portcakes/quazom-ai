@@ -19,6 +19,7 @@ import {
 } from '@/inngest/schemas';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
+import { recordAiUsage } from '@/inngest/ai-usage';
 import {
   ALPHA_LIMITS,
   countCurriculaForUser,
@@ -675,6 +676,16 @@ export const appRouter = createTRPCRouter({
         system:
           'You write tight, specific titles and 1-2 sentence descriptions for personal study notes. Stay grounded in the note content; do not invent facts. Title is concise (no trailing punctuation). Description is plain prose.',
         prompt: `Summarize the following study note. Return a title and a 1-2 sentence description.\n\n---\n${content}\n---`,
+      });
+      // Best-effort token-usage log so the admin dashboard can attribute
+      // summarize-note spend per user. Awaited so the row hits Postgres
+      // before we return, but `recordAiUsage` already swallows failures.
+      await recordAiUsage({
+        userId: ctx.userId,
+        kind: 'NOTE_SUMMARY',
+        model: SUMMARIZE_MODEL,
+        result,
+        resourceId: input.id,
       });
       const parsed = summarizeNoteSchema.parse(result.object);
       return parsed;

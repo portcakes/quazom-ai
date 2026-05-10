@@ -19,6 +19,10 @@ model User {
   email           String
   emailVerified   Boolean           @default(false)
   image           String?
+  // Grants access to the apps/admin analytics console. Flipped manually in
+  // the database — there is no UI that mints admins. Defaults to false so a
+  // compromised signup flow can't escalate.
+  isAdmin         Boolean           @default(false)
   // Alpha-program flag. Drives the per-user generation limits (curricula,
   // lessons, discussions) — every existing and new user defaults to true
   // until the alpha period ends.
@@ -47,6 +51,7 @@ model User {
   studySchedules  StudySchedule[]
   studySessions   StudySession[]
   checkIns        CheckIn[]
+  aiUsage         AiUsage[]
 
   @@unique([email])
   @@map("user")
@@ -566,4 +571,42 @@ model CheckIn {
   @@unique([userId, date])
   @@index([userId])
   @@map("check_in")
+}
+
+// What kind of AI call produced a usage row. Keeps `kind` typed so the admin
+// dashboard can break tokens down by feature without a free-form string.
+enum AiUsageKind {
+  CURRICULUM
+  CURRICULUM_BACKFILL
+  LESSON
+  DISCUSSION_REPLY
+  SUBMISSION_FEEDBACK
+  NOTE_SUMMARY
+}
+
+// Token-usage telemetry for every server-side AI call we make on behalf of
+// a user. Written immediately after the model call succeeds so the admin
+// console can aggregate per-user / per-feature spend without re-counting
+// from logs. `userId` is intentionally NOT a FK — we want the row to
+// survive user deletion for ops accounting.
+model AiUsage {
+  id              String      @id
+  userId          String
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  kind            AiUsageKind
+  // Model identifier as passed to the AI SDK, e.g. "gemini-2.5-flash-lite".
+  model           String
+  inputTokens     Int         @default(0)
+  outputTokens    Int         @default(0)
+  totalTokens     Int         @default(0)
+  // Free-form id of the entity this call relates to (curriculumId, lessonId,
+  // noteId, etc.) for forensic drill-down. Optional because not every call
+  // has one obvious owner.
+  resourceId      String?
+  createdAt       DateTime    @default(now())
+
+  @@index([userId])
+  @@index([kind])
+  @@index([createdAt])
+  @@map("ai_usage")
 }

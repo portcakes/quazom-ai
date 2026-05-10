@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Quazom Admin
 
-## Getting Started
+Internal analytics console for the Quazom platform. Surfaces aggregate
+and per-user behaviour — sign-ups, sign-ins, curricula / lesson
+generations, note + annotation activity, AI token usage, and referral
+sources — across configurable time ranges. Deliberately read-only and
+content-free: the admin sees counts and timestamps, never the actual
+curricula, lessons, or notes a user writes.
 
-First, run the development server:
+## Running locally
 
 ```bash
-npm run dev
+# From the repo root
+npm install
+npm run dev:admin   # serves on http://localhost:3003
 # or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev:all     # starts all apps via mprocs
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The first run also generates the Prisma client. Make sure `apps/admin/.env`
+points at the same `DATABASE_URL` as `apps/main/.env` — the two apps share
+the user / session / curriculum tables.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Granting admin access
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+There is no signup flow inside the admin console. Admins are minted by
+flipping `isAdmin` on an existing `user` row:
 
-## Learn More
+```sql
+UPDATE "user" SET "isAdmin" = true WHERE email = 'me@example.com';
+```
 
-To learn more about Next.js, take a look at the following resources:
+After that, sign in at `http://localhost:3003/login` using the same
+email/password that account uses on the main app. Non-admins that
+attempt to sign in are bounced back to the login page with a helpful
+error.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Where things live
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `app/(auth)/login/` — admin sign-in
+- `app/(admin)/page.tsx` — overview dashboard (KPIs, referrals)
+- `app/(admin)/users/page.tsx` — per-user analytics table
+- `app/(admin)/users/[id]/page.tsx` — per-user drill-down
+- `lib/auth.ts` — Better Auth instance (own secret, shared DB)
+- `lib/auth-utils.ts` — `requireAdmin` server guard
+- `lib/queries/analytics.ts` — all dashboard queries
+- `lib/range.ts` — `?range=` parsing and date math
 
-## Deploy on Vercel
+## AI token usage telemetry
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Every server-side AI call we make on behalf of a user writes an
+`ai_usage` row before returning. The helper lives at
+`inngest/ai-usage.ts` and is invoked from `inngest/functions.ts` and
+the `summarizeNote` tRPC mutation. New AI features should call
+`recordAiUsage` immediately after `generateObject` / `generateText` so
+the admin dashboard picks up the spend automatically.
