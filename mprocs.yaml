@@ -13,3 +13,5 @@ procs:
       PORT: "3002"
   emails:
     cmd: ["npm", "--workspace", "@quazom-ai/emails", "run", "dev"]
+  inngest:
+    cmd: ["npx", "inngest-cli@latest", "dev"]
