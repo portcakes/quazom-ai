@@ -5,6 +5,7 @@ import { Toaster } from "@quazom-ai/ui/components/ui/sonner";
 import { TooltipProvider } from "@quazom-ai/ui/components/ui/tooltip";
 import { TRPCReactProvider } from "@/trpc/client";
 import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,6 +38,7 @@ export default function RootLayout({
         </TRPCReactProvider>
         <Toaster />
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
