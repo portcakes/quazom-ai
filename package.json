@@ -11,6 +11,7 @@
         "build:main": "npm --workspace apps/main run build",
         "dev:web": "npm --workspace apps/web run dev",
         "build:web": "npm --workspace apps/web run build",
+        "dev:admin": "npm --workspace apps/admin run dev",
     "dev:docs": "npm --workspace apps/docs run dev",
     "build:docs": "npm --workspace apps/docs run build",
     "dev:emails": "npm --workspace @quazom-ai/emails run dev",

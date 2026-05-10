@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     description:
       "Tell Quazom what you want to learn and we'll craft a complete curriculum—modules, lessons, quizzes, and projects—then keep you on track with daily check-ins and streaks.",
     images: [
-      { url: "https://quazom.ai/og-image.png" },
+      { url: "https://www.quazom.ai/og-image.png" },
     ],
   },
 };

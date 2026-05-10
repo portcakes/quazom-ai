@@ -11,7 +11,13 @@ procs:
     cmd: ["npm", "--workspace", "apps/docs", "run", "dev"]
     env:
       PORT: "3002"
+  admin:
+    cmd: ["npm", "--workspace", "apps/admin", "run", "dev"]
+    env:
+      PORT: "3003"
   emails:
     cmd: ["npm", "--workspace", "@quazom-ai/emails", "run", "dev"]
+    env:
+      PORT: "3004"
   inngest:
     cmd: ["npx", "inngest-cli@latest", "dev"]
