@@ -297,14 +297,21 @@ export async function getUserActivity(rangeId: RangeId): Promise<UserActivityRow
   const byId = <T extends { userId: string }>(rows: T[]) =>
     new Map<string, T>(rows.map((r) => [r.userId, r]));
 
+  // `AiUsage.userId` is nullable (we keep usage rows around after a user is
+  // deleted for ops accounting), so `groupBy` returns `string | null`. Filter
+  // those orphan rows out before bucketing — per-user analytics don't surface
+  // them anyway.
+  const withUserId = <T extends { userId: string | null }>(rows: T[]) =>
+    rows.filter((r): r is T & { userId: string } => r.userId !== null);
+
   const sessionByUser = byId(sessionAgg);
   const sessionAllByUser = byId(sessionAllAgg);
   const curriculaByUser = byId(curriculaAgg);
   const notesByUser = byId(notesAgg);
   const annotationsByUser = byId(annotationsAgg);
   const schedulesByUser = byId(schedulesAgg);
-  const summaryByUser = byId(summaryAgg);
-  const tokensByUser = byId(tokensAgg);
+  const summaryByUser = byId(withUserId(summaryAgg));
+  const tokensByUser = byId(withUserId(tokensAgg));
 
   return users.map((u) => ({
     id: u.id,
