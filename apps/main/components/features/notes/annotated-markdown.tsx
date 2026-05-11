@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { visit } from "unist-util-visit";
@@ -10,6 +10,11 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@quazom-ai/ui/components/ui/hover-card";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@quazom-ai/ui/components/ui/popover";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { useTRPC } from "@/trpc/client";
 import { Markdown } from "@/components/shared/markdown";
@@ -151,6 +156,7 @@ function AnnotationMark({
 }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const isCoarsePointer = useIsCoarsePointer();
 
   const remove = useMutation(
     trpc.deleteAnnotation.mutationOptions({
@@ -167,33 +173,89 @@ function AnnotationMark({
     }),
   );
 
+  const body = (
+    <div className="flex flex-col gap-2">
+      <p className="whitespace-pre-wrap text-sm leading-relaxed">
+        {annotation.annotation}
+      </p>
+      <div className="flex items-center justify-end">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 cursor-pointer text-destructive hover:text-destructive"
+          disabled={remove.isPending}
+          onClick={() => remove.mutate({ id: annotation.id })}
+        >
+          <Trash2Icon className="size-3.5" />
+          Delete
+        </Button>
+      </div>
+    </div>
+  );
+
+  const trigger = (
+    // `mark` is the inline highlighted text. On touch we make it explicitly
+    // tappable (role=button + tabIndex) so the Popover trigger fires
+    // reliably; on desktop the cursor hint is enough.
+    <mark
+      role={isCoarsePointer ? "button" : undefined}
+      tabIndex={isCoarsePointer ? 0 : undefined}
+      className={
+        isCoarsePointer
+          ? "cursor-pointer rounded-sm bg-yellow-200/60 px-0.5 underline decoration-yellow-700/50 decoration-dotted underline-offset-4 dark:bg-yellow-400/25 dark:decoration-yellow-300/60"
+          : "cursor-help rounded-sm bg-yellow-200/60 px-0.5 underline decoration-yellow-700/50 decoration-dotted underline-offset-4 dark:bg-yellow-400/25 dark:decoration-yellow-300/60"
+      }
+    >
+      {children}
+    </mark>
+  );
+
+  // Radix HoverCard listens for pointerenter/leave through passive event
+  // listeners — on iOS Safari those never fire a "hover", so the card
+  // never opens AND the engine logs "Unable to preventDefault inside
+  // passive event listener invocation" when it tries to suppress the
+  // synthetic click. Swap in a tap-driven Popover for coarse pointers.
+  if (isCoarsePointer) {
+    return (
+      <Popover>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+        <PopoverContent
+          className="w-80"
+          // Keep the page from scrolling/jumping when the popover opens
+          // from an inline element near the viewport edge.
+          collisionPadding={12}
+        >
+          {body}
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
   return (
     <HoverCard openDelay={120} closeDelay={120}>
-      <HoverCardTrigger asChild>
-        <mark className="cursor-help rounded-sm bg-yellow-200/60 px-0.5 underline decoration-yellow-700/50 decoration-dotted underline-offset-4 dark:bg-yellow-400/25 dark:decoration-yellow-300/60">
-          {children}
-        </mark>
-      </HoverCardTrigger>
-      <HoverCardContent className="w-80">
-        <div className="flex flex-col gap-2">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">
-            {annotation.annotation}
-          </p>
-          <div className="flex items-center justify-end">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 cursor-pointer text-destructive hover:text-destructive"
-              disabled={remove.isPending}
-              onClick={() => remove.mutate({ id: annotation.id })}
-            >
-              <Trash2Icon className="size-3.5" />
-              Delete
-            </Button>
-          </div>
-        </div>
-      </HoverCardContent>
+      <HoverCardTrigger asChild>{trigger}</HoverCardTrigger>
+      <HoverCardContent className="w-80">{body}</HoverCardContent>
     </HoverCard>
   );
+}
+
+/**
+ * `true` when the primary input is touch (or otherwise can't hover) — i.e.
+ * phones and tablets. Defaults to `false` during SSR so the desktop
+ * HoverCard branch is rendered initially and we don't ship an unnecessary
+ * Popover bundle to keyboard/mouse users. We then update on mount and
+ * subscribe to changes (e.g. plugging in a mouse on a 2-in-1).
+ */
+function useIsCoarsePointer(): boolean {
+  const [coarse, setCoarse] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mql = window.matchMedia("(hover: none), (pointer: coarse)");
+    setCoarse(mql.matches);
+    const onChange = (event: MediaQueryListEvent) => setCoarse(event.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  return coarse;
 }
