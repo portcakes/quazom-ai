@@ -53,9 +53,9 @@ function LessonBody({
 }) {
   switch (lesson.activityType) {
     case "QUIZ":
-      return <QuizView lesson={lesson} kind="quiz" />;
+      return <QuizView lesson={lesson} kind="quiz" userId={userId} />;
     case "EXERCISE":
-      return <QuizView lesson={lesson} kind="exercise" />;
+      return <QuizView lesson={lesson} kind="exercise" userId={userId} />;
     case "READING":
     case "OTHER":
       return <ReadingView lesson={lesson} />;

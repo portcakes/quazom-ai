@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2Icon, SparklesIcon, ArrowRightIcon, RefreshCwIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  CheckCircle2Icon,
+  Loader2Icon,
+  RefreshCwIcon,
+  SparklesIcon,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,8 +21,10 @@ import {
   DialogTrigger,
 } from "@quazom-ai/ui/components/ui/dialog";
 import { Badge } from "@quazom-ai/ui/components/ui/badge";
+import { Progress } from "@quazom-ai/ui/components/ui/progress";
 import { ScrollArea } from "@quazom-ai/ui/components/ui/scroll-area";
 import { Button } from "@quazom-ai/ui/components/ui/button";
+import { cn } from "@quazom-ai/ui/lib/utils";
 import { useTRPC } from "@/trpc/client";
 import type { CurriculumModuleWithLessons } from "@/lib/queries/lesson";
 
@@ -27,34 +35,83 @@ type Props = {
 
 export function ModuleCard({ module, index }: Props) {
   const [open, setOpen] = useState(false);
+  const percent =
+    module.totalLessonCount > 0
+      ? Math.round(
+          (module.completedLessonCount / module.totalLessonCount) * 100,
+        )
+      : 0;
+  const complete = module.isCompleted;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button
           type="button"
-          className="group flex w-full min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-5 text-left transition-colors hover:bg-sidebar-accent/40 hover:ring-1 hover:ring-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+          className={cn(
+            "group flex w-full min-w-0 flex-col gap-3 rounded-xl border bg-card p-5 text-left transition-colors hover:bg-sidebar-accent/40 hover:ring-1 hover:ring-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer",
+            complete
+              ? "border-emerald-500/50 bg-emerald-500/5 hover:bg-emerald-500/10"
+              : "border-border",
+          )}
         >
           <div className="flex w-full items-start justify-between gap-3">
             <div className="flex min-w-0 flex-1 items-start gap-3">
-              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-sm font-medium text-muted-foreground">
-                {index + 1}
+              <span
+                className={cn(
+                  "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full font-mono text-sm font-medium",
+                  complete
+                    ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {complete ? (
+                  <CheckCircle2Icon className="size-4" />
+                ) : (
+                  index + 1
+                )}
               </span>
-              {/* break-words instead of truncate so long titles wrap on
-                  narrow viewports rather than getting clipped past the
-                  card edge. */}
               <h3 className="min-w-0 break-words font-heading text-lg font-semibold">
                 {module.title}
               </h3>
             </div>
-            <Badge variant="outline" className="shrink-0">
-              {module.lessons.length}{" "}
-              {module.lessons.length === 1 ? "lesson" : "lessons"}
-            </Badge>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+              <Badge variant="outline" className="capitalize">
+                {module.level}
+              </Badge>
+              <Badge variant="outline">
+                {module.lessons.length}{" "}
+                {module.lessons.length === 1 ? "lesson" : "lessons"}
+              </Badge>
+            </div>
           </div>
           <p className="break-words text-sm leading-relaxed text-muted-foreground">
             {module.summary}
           </p>
+          {module.totalLessonCount > 0 ? (
+            <div className="flex flex-col gap-1.5 pt-1">
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>
+                  {complete ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2Icon className="size-3.5" />
+                      Module complete
+                    </span>
+                  ) : (
+                    `${module.completedLessonCount} of ${module.totalLessonCount} complete`
+                  )}
+                </span>
+                <span className="font-mono tabular-nums">{percent}%</span>
+              </div>
+              <Progress
+                value={percent}
+                className={cn(
+                  "h-1.5",
+                  complete ? "[&>[data-slot=progress-indicator]]:bg-emerald-500" : null,
+                )}
+              />
+            </div>
+          ) : null}
           {module.objectives.length > 0 ? (
             <div className="flex w-full flex-wrap gap-2 pt-1">
               {module.objectives.map((objective) => (
@@ -81,9 +138,17 @@ export function ModuleCard({ module, index }: Props) {
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Lessons
-          </h4>
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Lessons
+            </h4>
+            {module.totalLessonCount > 0 ? (
+              <span className="text-xs text-muted-foreground">
+                {module.completedLessonCount} / {module.totalLessonCount}{" "}
+                complete
+              </span>
+            ) : null}
+          </div>
           {module.lessons.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No lessons listed for this module.
@@ -130,23 +195,22 @@ function LessonRow({ lesson, index, onNavigate }: LessonRowProps) {
   const isReady = lesson.status === "READY";
   const isGenerating = lesson.status === "GENERATING" || generate.isPending;
   const isFailed = lesson.status === "FAILED";
+  const isCompleted = lesson.isCompleted;
 
   // Single button class so the desktop/inline and mobile/below variants stay
-  // visually identical apart from sizing. `w-3/4` honours the 75% mobile
-  // request; `sm:w-auto` snaps back to natural width once the row goes
-  // horizontal.
+  // visually identical apart from sizing.
   const buttonClass = "w-3/4 cursor-pointer sm:w-auto";
 
   const button = isReady ? (
     <Button
       asChild
       size="sm"
-      variant="outline"
+      variant={isCompleted ? "ghost" : "outline"}
       className={buttonClass}
       onClick={onNavigate}
     >
       <Link href={`/lessons/${lesson.id}`}>
-        Open
+        {isCompleted ? "Review" : "Open"}
         <ArrowRightIcon className="size-3.5" />
       </Link>
     </Button>
@@ -192,19 +256,39 @@ function LessonRow({ lesson, index, onNavigate }: LessonRowProps) {
   //   - sm+: original single-row layout with title/desc on the left, badge +
   //     button on the right.
   return (
-    <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div
+      className={cn(
+        "flex flex-col gap-3 px-4 py-3 transition-colors sm:flex-row sm:items-center sm:justify-between",
+        isCompleted ? "bg-emerald-500/5" : null,
+      )}
+    >
       <div className="flex min-w-0 items-start gap-3 sm:flex-1 sm:items-center">
-        <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-          {String(index + 1).padStart(2, "0")}
+        <span
+          className={cn(
+            "flex size-6 shrink-0 items-center justify-center rounded-full font-mono text-xs tabular-nums",
+            isCompleted
+              ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+              : "bg-transparent text-muted-foreground",
+          )}
+        >
+          {isCompleted ? (
+            <CheckCircle2Icon className="size-3.5" />
+          ) : (
+            String(index + 1).padStart(2, "0")
+          )}
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="flex items-start justify-between gap-2 sm:items-center">
-            <span className="min-w-0 break-words text-sm font-medium">
+            <span
+              className={cn(
+                "min-w-0 break-words text-sm font-medium",
+                isCompleted
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : "text-foreground",
+              )}
+            >
               {lesson.title}
             </span>
-            {/* Badge sits inline with the title on mobile so the description
-                gets the full row width below; on desktop the badge moves to
-                the trailing action group instead. */}
             <Badge
               variant="secondary"
               className="shrink-0 capitalize sm:hidden"

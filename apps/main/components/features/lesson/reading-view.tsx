@@ -75,7 +75,7 @@ export function ReadingView({ lesson }: Props) {
                 </div>
                 <p className="text-xs text-muted-foreground">{resource.reason}</p>
                 <a
-                  href={`https://www.google.com/search?q=${encodeURIComponent(resource.searchQuery)}`}
+                  href={resourceSearchUrl(resource.type, resource.searchQuery)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
@@ -114,4 +114,14 @@ export function ReadingView({ lesson }: Props) {
       </div>
     </Highlightable>
   );
+}
+
+// Video resources go to YouTube, everything else to Google. Keeps the link
+// targeting consistent with how the AI is asked to seed `searchQuery`.
+function resourceSearchUrl(type: string, query: string): string {
+  const q = encodeURIComponent(query);
+  if (type === "video") {
+    return `https://www.youtube.com/results?search_query=${q}`;
+  }
+  return `https://www.google.com/search?q=${q}`;
 }

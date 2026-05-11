@@ -2,9 +2,14 @@ import { randomUUID } from "node:crypto";
 import { inngest } from "./client";
 import { userChannel } from "./channels";
 import {
+  assessmentLengthForLevel,
   curriculumSchema,
+  exerciseQuestionsOnlySchema,
   lessonGenerationSchema,
+  levelExtensionSchema,
   modulesBackfillSchema,
+  nextCurriculumLevel,
+  quizQuestionsOnlySchema,
   submissionFeedbackSchema,
   activityTypeToDb,
   type LessonActivityType,
@@ -88,7 +93,11 @@ Sequence modules from foundational to advanced. Each lesson must have a concrete
           select: { id: true, title: true },
         });
 
-        // Build Module + Lesson stubs in deterministic order.
+        // Build Module + Lesson stubs in deterministic order. Every module
+        // in the initial batch inherits the curriculum's level so the
+        // "Generate next level" button starts at the right tier.
+        const initialLevel = (curriculum.level ?? event.data.level ?? "beginner")
+          .toLowerCase();
         for (const [moduleIdx, mod] of curriculum.modules.entries()) {
           const moduleId = crypto.randomUUID();
           await tx.module.create({
@@ -98,6 +107,7 @@ Sequence modules from foundational to advanced. Each lesson must have a concrete
               title: mod.title,
               summary: mod.summary,
               order: moduleIdx + 1,
+              level: initialLevel,
               objectives: mod.objectives,
             },
           });
@@ -237,6 +247,7 @@ Constraints:
         }
 
         let lessonCount = 0;
+        const moduleLevel = (curriculum.level ?? "beginner").toLowerCase();
         for (const [moduleIdx, mod] of parsed.modules.entries()) {
           const moduleId = crypto.randomUUID();
           await tx.module.create({
@@ -246,6 +257,7 @@ Constraints:
               title: mod.title,
               summary: mod.summary,
               order: moduleIdx + 1,
+              level: moduleLevel,
               objectives: mod.objectives,
             },
           });
@@ -452,7 +464,13 @@ export const generateLesson = inngest.createFunction(
                   id: crypto.randomUUID(),
                   lessonId,
                   title: generated.quiz.title,
-                  questions: normalizeQuestions(generated.quiz.questions),
+                  overview: generated.quiz.overview,
+                  content: generated.quiz.content,
+                  recommendedResources: generated.quiz.recommendedResources,
+                  // Questions stay empty until the learner clicks "Generate
+                  // quiz" and we fire the phase-2 inngest function.
+                  questions: [],
+                  questionsGenerated: false,
                 },
               });
             }
@@ -465,8 +483,14 @@ export const generateLesson = inngest.createFunction(
                   lessonId,
                   title: generated.exercise.title,
                   description: generated.exercise.description,
-                  questions: normalizeQuestions(generated.exercise.questions),
-                  hints: generated.exercise.hints ?? [],
+                  overview: generated.exercise.overview,
+                  content: generated.exercise.content,
+                  recommendedResources: generated.exercise.recommendedResources,
+                  questions: [],
+                  questionsGenerated: false,
+                  // Hints are still part of phase 2 — they're question
+                  // specific. Default to an empty array until then.
+                  hints: [],
                 },
               });
             }
@@ -536,6 +560,399 @@ export const generateLesson = inngest.createFunction(
     );
 
     return { lessonId: saved.id, title: saved.title };
+  },
+);
+
+// --------------------------------------------------------------------------
+// generateAssessmentQuestions
+//
+// Phase-2 generation for QUIZ and EXERCISE lessons. The lesson generation
+// (phase 1) produces a topic reading + recommended resources only; the learner
+// then clicks "Generate quiz/exercise" and we hit the AI a second time to
+// produce the actual question set, sized to the module's level.
+// --------------------------------------------------------------------------
+type GenerateAssessmentEvent = {
+  data: {
+    kind: "quiz" | "exercise";
+    id: string;
+    lessonId: string;
+    userId: string;
+  };
+};
+
+export const generateAssessmentQuestions = inngest.createFunction(
+  {
+    id: "generate-assessment-questions",
+    triggers: { event: "app/assessment.generate" },
+  },
+  async ({
+    event,
+    step,
+  }: {
+    event: GenerateAssessmentEvent;
+    step: Parameters<Parameters<typeof inngest.createFunction>[1]>[0]["step"];
+  }) => {
+    const { kind, id, lessonId, userId } = event.data;
+
+    // Load enough context to (a) verify ownership and (b) size the question
+    // pool to the module's level. We re-read the lesson's pre-assessment
+    // reading so the AI doesn't drift from what the learner just studied.
+    const context = await step.run("load-assessment-context", async () => {
+      const lesson = await prisma.lesson.findUnique({
+        where: { id: lessonId },
+        include: {
+          module: {
+            include: {
+              curriculum: {
+                select: {
+                  id: true,
+                  userId: true,
+                  subject: true,
+                  level: true,
+                  goal: true,
+                  title: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!lesson) throw new Error(`Lesson ${lessonId} not found`);
+      if (lesson.module.curriculum.userId !== userId) {
+        throw new Error("Lesson does not belong to the requesting user");
+      }
+
+      let topic = "";
+      let overview = "";
+      let title = lesson.title;
+      if (kind === "quiz") {
+        const row = await prisma.quiz.findUnique({ where: { id } });
+        if (!row) throw new Error(`Quiz ${id} not found`);
+        topic = row.content ?? "";
+        overview = row.overview ?? "";
+        title = row.title;
+      } else {
+        const row = await prisma.exercise.findUnique({ where: { id } });
+        if (!row) throw new Error(`Exercise ${id} not found`);
+        topic = row.content ?? "";
+        overview = row.overview ?? "";
+        title = row.title;
+      }
+
+      return { lesson, topic, overview, title };
+    });
+
+    const { min: minQ, max: maxQ } = assessmentLengthForLevel(
+      context.lesson.module.level,
+    );
+
+    const sharedSystem =
+      "You are an expert assessment designer. Generate concise, accurate multiple choice questions grounded in the supplied reading. Every question must test a real concept from the reading, not trivia. Exactly one answer per question is correct.";
+
+    const sharedPrompt = `Generate ${kind === "quiz" ? "a quiz" : "an exercise"} for the following lesson.
+
+Curriculum: ${context.lesson.module.curriculum.title} (${context.lesson.module.curriculum.subject})
+Module level: ${context.lesson.module.level}
+Lesson title: ${context.lesson.title}
+Assessment title: ${context.title}
+
+Overview the learner just read:
+${context.overview}
+
+Deep-dive the learner just read:
+${context.topic}
+
+Constraints:
+- Produce between ${minQ} and ${maxQ} multiple choice questions, inclusive.
+- Every question must have 4-6 plausible answers and exactly one correct answer.
+- \`correctAnswerIndex\` must be a valid 0-based index into \`answers\`.
+- Include a short explanation per question (1-2 sentences).
+- Questions must be answerable using the supplied reading.${
+      kind === "exercise"
+        ? "\n- Also produce 2-4 short, helpful hints the learner can reveal."
+        : ""
+    }`;
+
+    try {
+      if (kind === "quiz") {
+        const result = await step.ai.wrap(
+          "gemini-generate-quiz-questions",
+          generateObject,
+          {
+            model: google(MODEL),
+            schema: quizQuestionsOnlySchema,
+            system: sharedSystem,
+            prompt: sharedPrompt,
+          },
+        );
+        await step.run("record-quiz-questions-usage", () =>
+          recordAiUsage({
+            userId,
+            kind: "LESSON",
+            model: MODEL,
+            result,
+            resourceId: id,
+          }),
+        );
+        const parsed = quizQuestionsOnlySchema.parse(
+          (result as { object: unknown }).object,
+        );
+        await step.run("save-quiz-questions", async () => {
+          await prisma.quiz.update({
+            where: { id },
+            data: {
+              questions: normalizeQuestions(parsed.questions),
+              questionsGenerated: true,
+              // Reset any prior submission state so re-generating gives the
+              // learner a clean slate.
+              userAnswers: null as unknown as object,
+              feedback: null as unknown as object,
+              score: 0,
+              isPassed: false,
+              isCompleted: false,
+            },
+          });
+        });
+      } else {
+        const result = await step.ai.wrap(
+          "gemini-generate-exercise-questions",
+          generateObject,
+          {
+            model: google(MODEL),
+            schema: exerciseQuestionsOnlySchema,
+            system: sharedSystem,
+            prompt: sharedPrompt,
+          },
+        );
+        await step.run("record-exercise-questions-usage", () =>
+          recordAiUsage({
+            userId,
+            kind: "LESSON",
+            model: MODEL,
+            result,
+            resourceId: id,
+          }),
+        );
+        const parsed = exerciseQuestionsOnlySchema.parse(
+          (result as { object: unknown }).object,
+        );
+        await step.run("save-exercise-questions", async () => {
+          await prisma.exercise.update({
+            where: { id },
+            data: {
+              questions: normalizeQuestions(parsed.questions),
+              hints: parsed.hints ?? [],
+              questionsGenerated: true,
+              userAnswers: null as unknown as object,
+              feedback: null as unknown as object,
+              score: 0,
+              isPassed: false,
+              isCompleted: false,
+            },
+          });
+        });
+      }
+    } catch (err) {
+      // Surface the failure to the UI so the learner can retry.
+      await step.realtime.publish(
+        "publish-assessment-failed",
+        userChannel(userId).assessmentFailed,
+        { kind, id, lessonId, message: (err as Error).message ?? "Generation failed" },
+      );
+      throw err;
+    }
+
+    await step.realtime.publish(
+      "publish-assessment-ready",
+      userChannel(userId).assessmentReady,
+      { kind, id, lessonId },
+    );
+
+    return { kind, id };
+  },
+);
+
+// --------------------------------------------------------------------------
+// extendCurriculumLevel
+//
+// Generates a fresh batch of modules + lesson stubs at the next difficulty
+// tier (beginner → intermediate → advanced). Only callable when the learner
+// has completed every lesson at the current top level and the curriculum
+// isn't already at the cap.
+// --------------------------------------------------------------------------
+type ExtendCurriculumLevelEvent = {
+  data: {
+    curriculumId: string;
+    userId: string;
+    targetLevel: "intermediate" | "advanced";
+  };
+};
+
+export const extendCurriculumLevel = inngest.createFunction(
+  {
+    id: "extend-curriculum-level",
+    triggers: { event: "app/curriculum.extend_level" },
+  },
+  async ({
+    event,
+    step,
+  }: {
+    event: ExtendCurriculumLevelEvent;
+    step: Parameters<Parameters<typeof inngest.createFunction>[1]>[0]["step"];
+  }) => {
+    const { curriculumId, userId, targetLevel } = event.data;
+
+    const curriculum = await step.run("load-curriculum", async () => {
+      const row = await prisma.curriculum.findUnique({
+        where: { id: curriculumId },
+        select: {
+          id: true,
+          userId: true,
+          title: true,
+          subject: true,
+          level: true,
+          goal: true,
+          overview: true,
+          curriculumModules: {
+            orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+            select: {
+              id: true,
+              title: true,
+              summary: true,
+              level: true,
+              order: true,
+            },
+          },
+        },
+      });
+      if (!row) throw new Error(`Curriculum ${curriculumId} not found`);
+      if (row.userId !== userId) {
+        throw new Error("Curriculum does not belong to the requesting user");
+      }
+      return row;
+    });
+
+    // Re-validate the level transition. The tRPC layer already does this but
+    // doing it here too keeps the function safe to fire from anywhere.
+    let currentTopLevel = "";
+    for (const m of curriculum.curriculumModules) {
+      const lvl = m.level.toLowerCase();
+      if (lvl === "advanced") currentTopLevel = "advanced";
+      else if (lvl === "intermediate" && currentTopLevel !== "advanced")
+        currentTopLevel = "intermediate";
+      else if (!currentTopLevel) currentTopLevel = lvl;
+    }
+    const expected = nextCurriculumLevel(currentTopLevel || curriculum.level);
+    if (expected !== targetLevel) {
+      throw new Error(
+        `Cannot extend curriculum from ${currentTopLevel || curriculum.level} to ${targetLevel}`,
+      );
+    }
+
+    const priorSummary = curriculum.curriculumModules
+      .map((m: { title: string; summary: string }) => `- ${m.title}: ${m.summary}`)
+      .join("\n");
+
+    const result = await step.ai.wrap(
+      "gemini-extend-curriculum-level",
+      generateObject,
+      {
+        model: google(MODEL),
+        schema: levelExtensionSchema,
+        system:
+          "You are an expert instructional designer extending an existing curriculum into a harder difficulty tier. Build on what the learner already studied — do not repeat it. The new modules should explicitly assume mastery of the prior level.",
+        prompt: `Extend the following curriculum into the ${targetLevel} tier.
+
+Title: ${curriculum.title}
+Subject: ${curriculum.subject}
+Original learner goal: ${curriculum.goal}
+Curriculum overview: ${curriculum.overview}
+
+Modules the learner has already completed (lower-tier material — do not repeat these directly):
+${priorSummary}
+
+Constraints:
+- Output between 3 and 5 new modules at the ${targetLevel} level.
+- Each module must contain 5-8 concrete lessons with a defined activityType.
+- Vary activityType across lessons within a module so the learner is not just reading.
+- The modules should escalate in challenge through this batch and build on the prior level.`,
+      },
+    );
+
+    await step.run("record-extend-usage", () =>
+      recordAiUsage({
+        userId,
+        kind: "CURRICULUM_BACKFILL",
+        model: MODEL,
+        result,
+        resourceId: curriculumId,
+      }),
+    );
+
+    const parsed = levelExtensionSchema.parse(
+      (result as { object: unknown }).object,
+    );
+
+    const saved = await step.run("save-extended-modules", async () => {
+      return prisma.$transaction(async (tx) => {
+        // Re-fetch the highest existing order so the new modules sort after
+        // every prior batch.
+        const last = await tx.module.findFirst({
+          where: { curriculumId },
+          orderBy: [{ order: "desc" }],
+          select: { order: true },
+        });
+        const startOrder = (last?.order ?? 0) + 1;
+
+        let lessonCount = 0;
+        for (const [moduleIdx, mod] of parsed.modules.entries()) {
+          const moduleId = crypto.randomUUID();
+          await tx.module.create({
+            data: {
+              id: moduleId,
+              curriculumId,
+              title: mod.title,
+              summary: mod.summary,
+              order: startOrder + moduleIdx,
+              level: targetLevel,
+              objectives: mod.objectives,
+            },
+          });
+
+          if (mod.lessons.length === 0) continue;
+
+          await tx.lesson.createMany({
+            data: mod.lessons.map((lesson, lessonIdx) => ({
+              id: crypto.randomUUID(),
+              moduleId,
+              title: lesson.title,
+              description: lesson.description,
+              activityType: activityTypeToDb(lesson.activityType),
+              order: lessonIdx + 1,
+              status: "STUB",
+            })),
+          });
+          lessonCount += mod.lessons.length;
+        }
+
+        return { moduleCount: parsed.modules.length, lessonCount };
+      });
+    });
+
+    // Reuse the curriculumReady topic so the existing layout-level listener
+    // refreshes the curriculum page automatically.
+    await step.realtime.publish(
+      "publish-curriculum-ready",
+      userChannel(userId).curriculumReady,
+      { id: curriculum.id, title: curriculum.title },
+    );
+
+    return {
+      curriculumId,
+      targetLevel,
+      moduleCount: saved.moduleCount,
+      lessonCount: saved.lessonCount,
+    };
   },
 );
 
@@ -766,11 +1183,22 @@ const ACTIVITY_INSTRUCTIONS: Record<LessonActivityType, string> = {
   reading: `Populate the \`reading\` field. The reading must include:
   - a 2-4 paragraph topic overview
   - a thorough deep-dive in markdown with multiple headings/subheadings, examples, and clear explanations`,
-  quiz: `Populate the \`quiz\` field with 5-10 multiple choice questions. Every question must have 4-6 plausible answers and exactly one correct answer; \`correctAnswerIndex\` must be a valid 0-based index. Include short explanations.`,
-  exercise: `Populate the \`exercise\` field. Like a quiz: 5-10 multiple choice questions with one correct answer each. Add 2-4 helpful hints.`,
-  practice: `Populate the \`exercise\` field. Like a quiz: 5-10 multiple choice questions with one correct answer each. Add 2-4 helpful hints.`,
+  quiz: `Populate the \`quiz\` field with PRE-ASSESSMENT study material only — DO NOT include any questions yet. The questions will be generated in a separate step when the learner is ready.
+  - \`overview\`: a 2-4 paragraph topic overview that frames what the quiz will cover.
+  - \`content\`: a focused markdown reading on the topic so the learner can study before testing themselves. Use headings, short examples, and key terms. No questions, no answer keys.
+  - \`recommendedResources\`: a mix of resources. Include at least one of type 'article' or 'website' (rendered as a Google search) and at least one of type 'video' (rendered as a YouTube search) so the learner can read AND watch supporting material.`,
+  exercise: `Populate the \`exercise\` field with PRE-ASSESSMENT study material only — DO NOT include any questions or hints yet; those are produced in a separate generation step.
+  - \`description\` and \`instructions\`: short framing copy for the exercise.
+  - \`overview\`: a 2-4 paragraph topic overview.
+  - \`content\`: a focused markdown reading the learner can study before tackling the exercise.
+  - \`recommendedResources\`: include at least one Google-searchable reading and at least one YouTube-searchable video.`,
+  practice: `Populate the \`exercise\` field with PRE-ASSESSMENT study material only — DO NOT include any questions or hints yet; those are produced in a separate generation step.
+  - \`description\` and \`instructions\`: short framing copy for the exercise.
+  - \`overview\`: a 2-4 paragraph topic overview.
+  - \`content\`: a focused markdown reading the learner can study before tackling the exercise.
+  - \`recommendedResources\`: include at least one Google-searchable reading and at least one YouTube-searchable video.`,
   project: `Populate the \`project\` field. The objectives array is the rubric the learner will be graded against — each objective should be a concrete, demonstrable criterion. Choose a fitting projectType.`,
-  video: `Populate the \`video\` field. The overview should give the learner an AI summary of the video before they watch it. If you can confidently provide a real, working YouTube URL for the topic, do so; otherwise leave \`embedUrl\` empty and use \`externalUrl\` for a search link.`,
+  video: `Populate the \`video\` field. Embedding real video URLs is unreliable, so write the overview as if the learner will search for a video on this topic themselves rather than referencing a specific clip you already picked. Leave \`embedUrl\` empty and set \`externalUrl\` to a YouTube search URL of the form \`https://www.youtube.com/results?search_query=<url-encoded query>\` using the most useful search terms for the topic. Also populate \`base.recommendedResources\` with high-quality further-reading resources (articles, books, courses) so the learner has supporting material beyond the video search.`,
   discussion: `Populate the \`discussion\` field. The openingMessage should be a thought-provoking opening prompt the AI tutor uses to start the conversation.`,
   other: `Populate the \`reading\` field as a fallback general lesson.`,
 };

@@ -26,8 +26,8 @@ export default async function CurriculumPage({ params }: { params: Params }) {
       <CurriculumHero
         title={curriculum.title}
         overview={curriculum.overview}
-        level={curriculum.level}
         estimatedDuration={curriculum.estimatedDuration}
+        progress={curriculum.progress}
       />
       <CurriculumTabs
         id={curriculum.id}
@@ -36,6 +36,7 @@ export default async function CurriculumPage({ params }: { params: Params }) {
         objectives={curriculum.objectives}
         modules={curriculum.modules}
         resources={curriculum.recommendedResources}
+        progress={curriculum.progress}
       />
     </div>
   );

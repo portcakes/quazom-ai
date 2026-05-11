@@ -3,6 +3,8 @@ import { inngest } from "@/inngest/client";
 import {
   createCurriculum,
   backfillCurriculumModules,
+  extendCurriculumLevel,
+  generateAssessmentQuestions,
   generateLesson,
   gradeSubmission,
   replyToDiscussion,
@@ -14,6 +16,8 @@ export const { GET, POST, PUT } = serve({
   functions: [
     createCurriculum,
     backfillCurriculumModules,
+    extendCurriculumLevel,
+    generateAssessmentQuestions,
     generateLesson,
     gradeSubmission,
     replyToDiscussion,

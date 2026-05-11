@@ -36,6 +36,14 @@ export type LessonFeedback = {
 export type QuizDetail = {
   id: string;
   title: string;
+  // Pre-assessment study material. Always populated for newly-generated
+  // quizzes; older rows may have empty strings — the UI just skips empties.
+  overview: string;
+  content: string;
+  recommendedResources: CurriculumResource[];
+  // True once the learner has clicked "Generate quiz" and the AI returned
+  // the question set.
+  questionsGenerated: boolean;
   questions: QuizQuestion[];
   userAnswers: number[] | null;
   feedback: LessonFeedback | null;
@@ -250,6 +258,10 @@ function parseChatHistory(value: unknown): LessonChatMessage[] {
 function toQuizDetail(q: {
   id: string;
   title: string;
+  overview: string;
+  content: string;
+  recommendedResources: unknown;
+  questionsGenerated: boolean;
   questions: unknown;
   userAnswers: unknown;
   feedback: unknown;
@@ -262,6 +274,10 @@ function toQuizDetail(q: {
   return {
     id: q.id,
     title: q.title,
+    overview: q.overview,
+    content: q.content,
+    recommendedResources: parseResources(q.recommendedResources),
+    questionsGenerated: q.questionsGenerated,
     questions: parseQuestions(q.questions),
     userAnswers: parseUserAnswers(q.userAnswers),
     feedback: parseFeedback(q.feedback),
@@ -277,6 +293,10 @@ function toExerciseDetail(e: {
   id: string;
   title: string;
   description: string;
+  overview: string;
+  content: string;
+  recommendedResources: unknown;
+  questionsGenerated: boolean;
   questions: unknown;
   hints: unknown;
   userAnswers: unknown;
@@ -291,6 +311,10 @@ function toExerciseDetail(e: {
     id: e.id,
     title: e.title,
     description: e.description,
+    overview: e.overview,
+    content: e.content,
+    recommendedResources: parseResources(e.recommendedResources),
+    questionsGenerated: e.questionsGenerated,
     questions: parseQuestions(e.questions),
     hints: Array.isArray(e.hints) ? (e.hints as string[]) : [],
     userAnswers: parseUserAnswers(e.userAnswers),
@@ -386,20 +410,35 @@ function toDiscussionDetail(d: {
 // lessons list (with status), backed by Lesson rows instead of curriculum JSON.
 // --------------------------------------------------------------------------
 
+export type LessonRowSummary = {
+  id: string;
+  title: string;
+  description: string;
+  activityType: LessonActivityType;
+  status: LessonStatus;
+  order: number;
+  // True iff the activity-specific child row is marked complete. For
+  // quiz/exercise this means the learner submitted; for video/reading it
+  // means they hit "Mark as watched/read"; for project, that they submitted a
+  // URL; for discussion, that the closing tutor turn fired.
+  isCompleted: boolean;
+};
+
 export type CurriculumModuleWithLessons = {
   id: string;
   title: string;
   summary: string;
   order: number;
+  // Which difficulty tier this module belongs to. Lower-case; one of
+  // "beginner" | "intermediate" | "advanced".
+  level: string;
   objectives: string[];
-  lessons: {
-    id: string;
-    title: string;
-    description: string;
-    activityType: LessonActivityType;
-    status: LessonStatus;
-    order: number;
-  }[];
+  lessons: LessonRowSummary[];
+  // Counts computed from `lessons` for the progress bar.
+  completedLessonCount: number;
+  totalLessonCount: number;
+  // True iff every lesson in this module is complete.
+  isCompleted: boolean;
 };
 
 export async function getCurriculumModulesWithLessons(
@@ -414,6 +453,10 @@ export async function getCurriculumModulesWithLessons(
   });
   if (!curriculum || curriculum.userId !== session.user.id) return [];
 
+  // Pull the per-type completion flag for every lesson in the curriculum in a
+  // single round trip. We `take: 1` for each relation because the generation
+  // pipeline only ever writes one child row per lesson; the take is just a
+  // bound so Prisma can serialise the relation cleanly.
   const modules = await prisma.module.findMany({
     where: { curriculumId },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -427,17 +470,71 @@ export async function getCurriculumModulesWithLessons(
           activityType: true,
           status: true,
           order: true,
+          videos: { take: 1, select: { isCompleted: true } },
+          readings: { take: 1, select: { isCompleted: true } },
+          quizzes: { take: 1, select: { isCompleted: true } },
+          exercises: { take: 1, select: { isCompleted: true } },
+          projects: { take: 1, select: { isCompleted: true } },
+          discussions: { take: 1, select: { isCompleted: true } },
         },
       },
     },
   });
 
-  return modules.map((m) => ({
-    id: m.id,
-    title: m.title,
-    summary: m.summary,
-    order: m.order,
-    objectives: Array.isArray(m.objectives) ? (m.objectives as string[]) : [],
-    lessons: m.lessons,
-  }));
+  return modules.map((m) => {
+    const lessons: LessonRowSummary[] = m.lessons.map((l) => ({
+      id: l.id,
+      title: l.title,
+      description: l.description,
+      activityType: l.activityType,
+      status: l.status,
+      order: l.order,
+      isCompleted: lessonIsCompleted(l),
+    }));
+    const completedLessonCount = lessons.filter((l) => l.isCompleted).length;
+    return {
+      id: m.id,
+      title: m.title,
+      summary: m.summary,
+      order: m.order,
+      level: m.level,
+      objectives: Array.isArray(m.objectives) ? (m.objectives as string[]) : [],
+      lessons,
+      completedLessonCount,
+      totalLessonCount: lessons.length,
+      isCompleted:
+        lessons.length > 0 && completedLessonCount === lessons.length,
+    };
+  });
+}
+
+// Derive a single boolean from the activity-specific child rows. We pick the
+// row that matches the lesson's activityType so a stale child from a prior
+// generation can't flip the flag.
+function lessonIsCompleted(lesson: {
+  activityType: LessonActivityType;
+  videos: { isCompleted: boolean }[];
+  readings: { isCompleted: boolean }[];
+  quizzes: { isCompleted: boolean }[];
+  exercises: { isCompleted: boolean }[];
+  projects: { isCompleted: boolean }[];
+  discussions: { isCompleted: boolean }[];
+}): boolean {
+  switch (lesson.activityType) {
+    case "VIDEO":
+      return lesson.videos[0]?.isCompleted ?? false;
+    case "READING":
+    case "OTHER":
+      return lesson.readings[0]?.isCompleted ?? false;
+    case "QUIZ":
+      return lesson.quizzes[0]?.isCompleted ?? false;
+    case "EXERCISE":
+      return lesson.exercises[0]?.isCompleted ?? false;
+    case "PROJECT":
+      return lesson.projects[0]?.isCompleted ?? false;
+    case "DISCUSSION":
+      return lesson.discussions[0]?.isCompleted ?? false;
+    default:
+      return false;
+  }
 }

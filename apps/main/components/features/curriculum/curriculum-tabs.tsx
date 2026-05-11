@@ -6,6 +6,7 @@ import type {
   CurriculumResource,
 } from "@/inngest/schemas";
 import type { CurriculumModuleWithLessons } from "@/lib/queries/lesson";
+import type { CurriculumProgress } from "@/lib/queries/curriculum";
 import { SyllabusTab } from "./syllabus-tab";
 import { ModulesTab } from "./modules-tab";
 import { ResourcesTab } from "./resources-tab";
@@ -20,6 +21,7 @@ type Props = {
   objectives: CurriculumObjective[];
   modules: CurriculumModuleWithLessons[];
   resources: CurriculumResource[];
+  progress: CurriculumProgress;
 };
 
 export function CurriculumTabs({
@@ -29,6 +31,7 @@ export function CurriculumTabs({
   objectives,
   modules,
   resources,
+  progress,
 }: Props) {
   return (
     <section className="mx-auto w-full max-w-4xl px-6 py-8">
@@ -63,7 +66,7 @@ export function CurriculumTabs({
           <SyllabusTab objectives={objectives} resources={resources} />
         </TabsContent>
         <TabsContent value="modules" className="mt-6">
-          <ModulesTab curriculumId={id} modules={modules} />
+          <ModulesTab curriculumId={id} modules={modules} progress={progress} />
         </TabsContent>
         <TabsContent value="resources" className="mt-6">
           <ResourcesTab resources={resources} />

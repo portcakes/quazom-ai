@@ -3,6 +3,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import prisma from "@quazom-ai/db";
+import type { LessonActivityType } from "@quazom-ai/db/enums";
 
 export type CourseSummary = {
   id: string;
@@ -16,6 +17,11 @@ export type CurriculumCardSummary = {
   estimatedDuration: string;
   overview: string;
   isHidden: boolean;
+  // Aggregated completion stats so the collection card can render a progress
+  // bar without each card hitting the DB individually.
+  completedLessonCount: number;
+  totalLessonCount: number;
+  progressPercent: number;
 };
 
 /**
@@ -49,7 +55,8 @@ export async function getUserCurriculaCount(): Promise<number> {
 }
 
 /**
- * All curricula for the collection page grid (visible + hidden).
+ * All curricula for the collection page grid (visible + hidden), with the
+ * per-curriculum completion stats so each card can render a progress bar.
  */
 export async function getUserCurricula(): Promise<CurriculumCardSummary[]> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -64,9 +71,76 @@ export async function getUserCurricula(): Promise<CurriculumCardSummary[]> {
       estimatedDuration: true,
       overview: true,
       isHidden: true,
+      curriculumModules: {
+        select: {
+          lessons: {
+            select: {
+              activityType: true,
+              videos: { take: 1, select: { isCompleted: true } },
+              readings: { take: 1, select: { isCompleted: true } },
+              quizzes: { take: 1, select: { isCompleted: true } },
+              exercises: { take: 1, select: { isCompleted: true } },
+              projects: { take: 1, select: { isCompleted: true } },
+              discussions: { take: 1, select: { isCompleted: true } },
+            },
+          },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return curricula;
+  return curricula.map((c) => {
+    let total = 0;
+    let completed = 0;
+    for (const m of c.curriculumModules) {
+      for (const l of m.lessons) {
+        total += 1;
+        if (lessonCompletedFromRows(l)) completed += 1;
+      }
+    }
+    const progressPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return {
+      id: c.id,
+      title: c.title,
+      level: c.level,
+      estimatedDuration: c.estimatedDuration,
+      overview: c.overview,
+      isHidden: c.isHidden,
+      completedLessonCount: completed,
+      totalLessonCount: total,
+      progressPercent,
+    };
+  });
+}
+
+// Local copy of the lesson-completion derivation kept here so the courses
+// query stays self-contained and Next.js doesn't have to import the more
+// expensive lesson query module for the collection page.
+function lessonCompletedFromRows(lesson: {
+  activityType: LessonActivityType;
+  videos: { isCompleted: boolean }[];
+  readings: { isCompleted: boolean }[];
+  quizzes: { isCompleted: boolean }[];
+  exercises: { isCompleted: boolean }[];
+  projects: { isCompleted: boolean }[];
+  discussions: { isCompleted: boolean }[];
+}): boolean {
+  switch (lesson.activityType) {
+    case "VIDEO":
+      return lesson.videos[0]?.isCompleted ?? false;
+    case "READING":
+    case "OTHER":
+      return lesson.readings[0]?.isCompleted ?? false;
+    case "QUIZ":
+      return lesson.quizzes[0]?.isCompleted ?? false;
+    case "EXERCISE":
+      return lesson.exercises[0]?.isCompleted ?? false;
+    case "PROJECT":
+      return lesson.projects[0]?.isCompleted ?? false;
+    case "DISCUSSION":
+      return lesson.discussions[0]?.isCompleted ?? false;
+    default:
+      return false;
+  }
 }

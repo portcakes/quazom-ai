@@ -1,65 +1,302 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRealtime } from "inngest/react";
 import { toast } from "sonner";
 import {
   CheckCircle2Icon,
   CircleAlertIcon,
+  Loader2Icon,
   RotateCcwIcon,
+  SearchIcon,
   SparklesIcon,
   XCircleIcon,
 } from "lucide-react";
+import { Badge } from "@quazom-ai/ui/components/ui/badge";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@quazom-ai/ui/components/ui/radio-group";
 import { Label } from "@quazom-ai/ui/components/ui/label";
-import { useTRPC } from "@/trpc/client";
+import { useTRPC, useTRPCClient } from "@/trpc/client";
+import { userChannel } from "@/inngest/channels";
 import type { LessonDetail } from "@/lib/queries/lesson";
+import { AnnotatedMarkdown } from "@/components/features/notes/annotated-markdown";
 import { Highlightable } from "./highlightable";
 import { LessonNotesPanel } from "./lesson-notes-panel";
 
 type Props = {
   lesson: LessonDetail;
   kind: "quiz" | "exercise";
+  userId: string;
 };
 
-export function QuizView({ lesson, kind }: Props) {
+const REALTIME_TOPICS = ["assessmentReady", "assessmentFailed"] as const;
+
+export function QuizView({ lesson, kind, userId }: Props) {
   const data = kind === "quiz" ? lesson.quiz : lesson.exercise;
 
   if (!data) {
     return (
-      <p className="text-sm text-muted-foreground">No questions available for this lesson.</p>
+      <p className="text-sm text-muted-foreground">No assessment available for this lesson.</p>
     );
   }
 
-  // Re-mount the form whenever the server-side answer/feedback identity flips
-  // (submitted / re-submitted). This keeps local form state in sync with
-  // server data without a setState-in-effect.
-  const formKey = `${data.id}:${data.userAnswers ? data.userAnswers.join(",") : "fresh"}:${data.feedback ? "feedback" : "no-feedback"}`;
-
-  return (
-    <QuizForm
-      key={formKey}
-      lesson={lesson}
-      data={data}
-      kind={kind}
-      hints={kind === "exercise" ? lesson.exercise?.hints ?? [] : []}
-      description={kind === "exercise" ? lesson.exercise?.description ?? null : null}
-    />
-  );
+  return <AssessmentBody lesson={lesson} data={data} kind={kind} userId={userId} />;
 }
 
 type QuizDataLike = NonNullable<LessonDetail["quiz"]> | NonNullable<LessonDetail["exercise"]>;
 
-type FormProps = {
+function AssessmentBody({
+  lesson,
+  data,
+  kind,
+  userId,
+}: {
   lesson: LessonDetail;
   data: QuizDataLike;
   kind: "quiz" | "exercise";
-  hints: string[];
-  description: string | null;
-};
+  userId: string;
+}) {
+  return (
+    <Highlightable
+      lessonId={lesson.id}
+      curriculumId={lesson.module.curriculum.id}
+    >
+      <div className="flex flex-col gap-8">
+        {kind === "exercise" && "description" in data && data.description ? (
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {data.description}
+          </p>
+        ) : null}
 
-function QuizForm({ lesson, data, kind, hints, description }: FormProps) {
+        <AssessmentReading data={data} />
+
+        {data.recommendedResources.length > 0 ? (
+          <StudyMaterial resources={data.recommendedResources} />
+        ) : null}
+
+        <QuestionsSection data={data} kind={kind} userId={userId} />
+
+        <LessonNotesPanel
+          lessonId={lesson.id}
+          curriculumId={lesson.module.curriculum.id}
+        />
+      </div>
+    </Highlightable>
+  );
+}
+
+function AssessmentReading({ data }: { data: QuizDataLike }) {
+  const hasOverview = Boolean(data.overview);
+  const hasContent = Boolean(data.content);
+  if (!hasOverview && !hasContent) return null;
+  return (
+    <>
+      {hasOverview ? (
+        <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
+          <h2 className="font-heading text-lg font-semibold">Overview</h2>
+          <AnnotatedMarkdown compact className="text-muted-foreground" annotations={[]}>
+            {data.overview}
+          </AnnotatedMarkdown>
+        </section>
+      ) : null}
+      {hasContent ? (
+        <article className="max-w-none">
+          <AnnotatedMarkdown annotations={[]}>{data.content}</AnnotatedMarkdown>
+        </article>
+      ) : null}
+    </>
+  );
+}
+
+function StudyMaterial({
+  resources,
+}: {
+  resources: QuizDataLike["recommendedResources"];
+}) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="font-heading text-xl font-semibold">Study material</h2>
+      <p className="text-sm text-muted-foreground">
+        Brush up on the topic before generating the questions — read, watch,
+        then test yourself.
+      </p>
+      <ul className="flex flex-col gap-2">
+        {resources.map((resource) => (
+          <li
+            key={`${resource.type}-${resource.title}`}
+            className="flex flex-col gap-1 rounded-lg border border-border bg-card/40 p-3"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="text-sm font-medium">{resource.title}</h3>
+              <Badge variant="secondary" className="capitalize">
+                {resource.type}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">{resource.reason}</p>
+            <a
+              href={resourceSearchUrl(resource.type, resource.searchQuery)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <SearchIcon className="size-3" />
+              <span className="truncate">{resource.searchQuery}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// Manages the phase-2 generation flow. While `questionsGenerated` is false
+// we show a "Generate" CTA; once questions exist we render the form. The
+// component listens for the `assessmentReady` realtime topic so the UI
+// transitions automatically when the AI job finishes.
+function QuestionsSection({
+  data,
+  kind,
+  userId,
+}: {
+  data: QuizDataLike;
+  kind: "quiz" | "exercise";
+  userId: string;
+}) {
+  const router = useRouter();
+  const trpc = useTRPC();
+  const trpcClient = useTRPCClient();
+  const queryClient = useQueryClient();
+
+  const [waiting, setWaiting] = useState(false);
+
+  // Subscribe to realtime. When the AI finishes generating, refresh so the
+  // server-rendered lesson detail pulls the new questions array.
+  const { messages } = useRealtime({
+    channel: userChannel(userId),
+    topics: REALTIME_TOPICS,
+    token: async () => {
+      const token = await trpcClient.realtimeToken.query();
+      return typeof token.apiBaseUrl === "string"
+        ? { key: token.key, apiBaseUrl: token.apiBaseUrl }
+        : token.key;
+    },
+  });
+
+  const lastReadyKey = useRef<string | null>(null);
+  useEffect(() => {
+    const ready = messages.byTopic.assessmentReady;
+    if (!ready || ready.kind !== "data") return;
+    const payload = ready.data as { id: string; lessonId: string };
+    if (payload.id !== data.id) return;
+    const key = `${ready.runId ?? ""}:${ready.createdAt?.toISOString?.() ?? ""}`;
+    if (lastReadyKey.current === key) return;
+    lastReadyKey.current = key;
+    // External system → React: documented exception to set-state-in-effect.
+    setWaiting(false);
+    router.refresh();
+    void queryClient.invalidateQueries();
+  }, [messages.byTopic.assessmentReady, data.id, router, queryClient]);
+
+  const lastFailKey = useRef<string | null>(null);
+  useEffect(() => {
+    const failed = messages.byTopic.assessmentFailed;
+    if (!failed || failed.kind !== "data") return;
+    const payload = failed.data as { id: string; message: string };
+    if (payload.id !== data.id) return;
+    const key = `${failed.runId ?? ""}:${failed.createdAt?.toISOString?.() ?? ""}`;
+    if (lastFailKey.current === key) return;
+    lastFailKey.current = key;
+    setWaiting(false);
+    toast.error(payload.message ?? "Failed to generate questions");
+  }, [messages.byTopic.assessmentFailed, data.id]);
+
+  const generate = useMutation(
+    trpc.generateAssessmentQuestions.mutationOptions({
+      onSuccess: () => {
+        setWaiting(true);
+        toast.success(
+          kind === "quiz" ? "Generating quiz…" : "Generating exercise…",
+        );
+      },
+      onError: (err) => {
+        setWaiting(false);
+        toast.error(err.message ?? "Failed to start generation");
+      },
+    }),
+  );
+
+  if (!data.questionsGenerated && data.questions.length === 0) {
+    const isPending = generate.isPending || waiting;
+    return (
+      <section className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-border bg-card/40 p-6 text-center">
+        <div className="flex flex-col gap-1">
+          <h3 className="font-heading text-lg font-semibold">
+            Ready to test yourself?
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            When you&apos;ve studied the material above, generate the{" "}
+            {kind === "quiz" ? "quiz" : "exercise"} questions. They&apos;re
+            sized to the module&apos;s level.
+          </p>
+        </div>
+        <Button
+          type="button"
+          className="cursor-pointer"
+          disabled={isPending}
+          onClick={() => generate.mutate({ kind, id: data.id })}
+        >
+          {isPending ? (
+            <>
+              <Loader2Icon className="size-4 animate-spin" />
+              Generating…
+            </>
+          ) : (
+            <>
+              <SparklesIcon className="size-4" />
+              Generate {kind === "quiz" ? "quiz" : "exercise"}
+            </>
+          )}
+        </Button>
+      </section>
+    );
+  }
+
+  // Only ExerciseDetail carries `hints`; type-narrow with the `kind` arg.
+  const hints =
+    kind === "exercise" && "hints" in data ? (data.hints ?? []) : [];
+
+  // Keying on identity + answers + feedback re-mounts the form whenever the
+  // server-side state flips (fresh generation, fresh submission, etc.), so
+  // local answer state stays in sync without an explicit reset effect.
+  const formKey = `${data.id}:${data.questions.length}:${data.userAnswers ? data.userAnswers.join(",") : "fresh"}:${data.feedback ? "feedback" : "no-feedback"}`;
+
+  return (
+    <QuestionsForm
+      key={formKey}
+      data={data}
+      kind={kind}
+      hints={hints}
+      onRegenerate={() => generate.mutate({ kind, id: data.id })}
+      regenerating={generate.isPending || waiting}
+    />
+  );
+}
+
+function QuestionsForm({
+  data,
+  kind,
+  hints,
+  onRegenerate,
+  regenerating,
+}: {
+  data: QuizDataLike;
+  kind: "quiz" | "exercise";
+  hints: string[];
+  onRegenerate: () => void;
+  regenerating: boolean;
+}) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
@@ -116,14 +353,38 @@ function QuizForm({ lesson, data, kind, hints, description }: FormProps) {
   };
 
   return (
-    <Highlightable
-      lessonId={lesson.id}
-      curriculumId={lesson.module.curriculum.id}
-    >
-    <div className="flex flex-col gap-8">
-      {description ? (
-        <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
-      ) : null}
+    <section className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-heading text-xl font-semibold">
+          {kind === "quiz" ? "Quiz" : "Exercise"}
+        </h2>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs">
+            {data.questions.length}{" "}
+            {data.questions.length === 1 ? "question" : "questions"}
+          </Badge>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="cursor-pointer"
+            disabled={regenerating}
+            onClick={onRegenerate}
+          >
+            {regenerating ? (
+              <>
+                <Loader2Icon className="size-4 animate-spin" />
+                Regenerating…
+              </>
+            ) : (
+              <>
+                <SparklesIcon className="size-3.5" />
+                Regenerate
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
 
       {kind === "exercise" && hints.length > 0 ? (
         <div className="rounded-xl border border-border bg-card/40 p-4">
@@ -233,13 +494,7 @@ function QuizForm({ lesson, data, kind, hints, description }: FormProps) {
           </Button>
         )}
       </div>
-
-      <LessonNotesPanel
-        lessonId={lesson.id}
-        curriculumId={lesson.module.curriculum.id}
-      />
-    </div>
-    </Highlightable>
+    </section>
   );
 }
 
@@ -317,4 +572,14 @@ function FeedbackList({ title, items }: { title: string; items: string[] }) {
       </ul>
     </div>
   );
+}
+
+// Match the reading-view/video-view link routing: video resources go to
+// YouTube, everything else to Google.
+function resourceSearchUrl(type: string, query: string): string {
+  const q = encodeURIComponent(query);
+  if (type === "video") {
+    return `https://www.youtube.com/results?search_query=${q}`;
+  }
+  return `https://www.google.com/search?q=${q}`;
 }

@@ -87,6 +87,58 @@ export const modulesBackfillSchema = z.object({
     ),
 });
 
+// Used by the "Generate intermediate / advanced modules" button on a
+// curriculum once the learner has completed every lesson at the current top
+// level. Produces a fresh batch of modules that build on the prior level's
+// learning rather than repeating it.
+export const levelExtensionSchema = z.object({
+  modules: z
+    .array(curriculumModuleSchema)
+    .min(3)
+    .max(5)
+    .describe(
+      "3-5 modules that extend the curriculum into the next difficulty tier. Each module must contain 5-8 concrete lessons with a defined activityType, and should build on the prior level's material instead of repeating it.",
+    ),
+});
+
+// Curriculum levels we support, ordered from easiest to hardest. Used by the
+// progression logic to determine the next available tier (or whether the
+// curriculum is at the cap).
+export const curriculumLevels = ["beginner", "intermediate", "advanced"] as const;
+export type CurriculumLevel = (typeof curriculumLevels)[number];
+
+// Returns the next level the learner can extend into, or null if they're
+// already at the top.
+export function nextCurriculumLevel(
+  current: string,
+): CurriculumLevel | null {
+  const normalized = current.toLowerCase() as CurriculumLevel;
+  const idx = curriculumLevels.indexOf(normalized);
+  if (idx === -1) return "intermediate";
+  if (idx >= curriculumLevels.length - 1) return null;
+  return curriculumLevels[idx + 1] ?? null;
+}
+
+// Question-count ranges per level. The phase-2 AI prompt uses these to size
+// quizzes/exercises so beginner assessments stay short and advanced ones get
+// progressively harder.
+export const ASSESSMENT_LENGTH_BY_LEVEL: Record<
+  CurriculumLevel,
+  { min: number; max: number }
+> = {
+  beginner: { min: 5, max: 10 },
+  intermediate: { min: 10, max: 25 },
+  advanced: { min: 25, max: 40 },
+};
+
+export function assessmentLengthForLevel(level: string): {
+  min: number;
+  max: number;
+} {
+  const normalized = level.toLowerCase() as CurriculumLevel;
+  return ASSESSMENT_LENGTH_BY_LEVEL[normalized] ?? ASSESSMENT_LENGTH_BY_LEVEL.beginner;
+}
+
 // Generic body shared by every lesson type. The activityType-specific child
 // content lives in `*Schema` below and is generated alongside this base.
 export const lessonBaseSchema = z.object({
@@ -150,16 +202,49 @@ export const quizQuestionSchema = z.object({
     .default(""),
 });
 
+// Quiz and Exercise lessons are now generated in two phases:
+//   1. The initial lesson generation produces the *pre-assessment* content —
+//      a topic overview, a markdown deep-dive, and a set of recommended
+//      readings (Google search) and videos (YouTube search). No questions
+//      yet.
+//   2. The learner clicks "Generate quiz/exercise" and we fire a second AI
+//      call that produces just the question set, sized to the module level.
+//
+// The schemas below mirror that split.
+
 export const quizContentSchema = z.object({
   title: z.string(),
-  questions: z
-    .array(quizQuestionSchema)
-    .min(3)
-    .max(10)
-    .describe("5-10 multiple choice questions. Each must have exactly one correct answer."),
+  overview: z
+    .string()
+    .describe(
+      "AI-written topic overview shown above the deep-dive: what this assessment covers and why it matters. 2-4 short paragraphs.",
+    ),
+  content: z
+    .string()
+    .describe(
+      "A focused markdown reading on the lesson topic. Should give the learner enough background to take the quiz: headings, short examples, key terms. Do NOT include questions.",
+    ),
+  recommendedResources: z
+    .array(curriculumResourceSchema)
+    .describe(
+      "A mix of resources to help the learner study before the quiz. Include at least one resource of type 'article' or 'website' (rendered as a Google search) and at least one of type 'video' (rendered as a YouTube search).",
+    ),
 });
 
-// Exercises are MC assessments — same shape as quiz, plus optional hints.
+// Phase-2 schema: questions only, length-driven by module level.
+export const quizQuestionsOnlySchema = z.object({
+  questions: z
+    .array(quizQuestionSchema)
+    .min(5)
+    .max(40)
+    .describe(
+      "Multiple choice questions sized to the module level. Each must have exactly one correct answer.",
+    ),
+});
+
+// Exercises mirror quizzes for the pre-assessment phase plus optional hints
+// once questions have been generated. `description`/`instructions` are still
+// emitted in phase 1 so the learner sees framing copy alongside the reading.
 export const exerciseContentSchema = z.object({
   title: z.string(),
   description: z.string(),
@@ -167,11 +252,35 @@ export const exerciseContentSchema = z.object({
     .string()
     .describe("Short paragraph telling the learner what to do.")
     .default(""),
+  overview: z
+    .string()
+    .describe(
+      "AI-written topic overview shown above the deep-dive. 2-4 short paragraphs.",
+    ),
+  content: z
+    .string()
+    .describe(
+      "A focused markdown reading on the lesson topic. Should give the learner enough background to tackle the exercise. Do NOT include questions.",
+    ),
+  recommendedResources: z
+    .array(curriculumResourceSchema)
+    .describe(
+      "Resources to help the learner study. Include at least one Google-searchable reading and one YouTube-searchable video.",
+    ),
+  hints: z
+    .array(z.string())
+    .describe("Optional hints the learner can reveal.")
+    .default([]),
+});
+
+export const exerciseQuestionsOnlySchema = z.object({
   questions: z
     .array(quizQuestionSchema)
-    .min(3)
-    .max(10)
-    .describe("5-10 multiple choice questions, same shape as a quiz."),
+    .min(5)
+    .max(40)
+    .describe(
+      "Multiple choice questions sized to the module level. Each must have exactly one correct answer.",
+    ),
   hints: z
     .array(z.string())
     .describe("Optional hints the learner can reveal.")
@@ -260,12 +369,15 @@ export type CurriculumModule = z.infer<typeof curriculumModuleSchema>;
 export type CurriculumResource = z.infer<typeof curriculumResourceSchema>;
 export type CurriculumPayload = z.infer<typeof curriculumSchema>;
 export type ModulesBackfillPayload = z.infer<typeof modulesBackfillSchema>;
+export type LevelExtensionPayload = z.infer<typeof levelExtensionSchema>;
 export type LessonBase = z.infer<typeof lessonBaseSchema>;
 export type LessonGeneration = z.infer<typeof lessonGenerationSchema>;
 export type VideoContent = z.infer<typeof videoContentSchema>;
 export type QuizContent = z.infer<typeof quizContentSchema>;
 export type QuizQuestion = z.infer<typeof quizQuestionSchema>;
+export type QuizQuestionsOnly = z.infer<typeof quizQuestionsOnlySchema>;
 export type ExerciseContent = z.infer<typeof exerciseContentSchema>;
+export type ExerciseQuestionsOnly = z.infer<typeof exerciseQuestionsOnlySchema>;
 export type ProjectContent = z.infer<typeof projectContentSchema>;
 export type ReadingContent = z.infer<typeof readingContentSchema>;
 export type DiscussionContent = z.infer<typeof discussionContentSchema>;

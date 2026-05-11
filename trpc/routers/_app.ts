@@ -15,6 +15,9 @@ import {
   ANNOTATION_TEXT_MAX_LENGTH,
   NOTE_DESCRIPTION_MAX_LENGTH,
   NOTE_MAX_LENGTH,
+  curriculumLevels,
+  nextCurriculumLevel,
+  type CurriculumLevel,
   type QuizQuestion,
 } from '@/inngest/schemas';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
@@ -377,6 +380,179 @@ export const appRouter = createTRPCRouter({
       });
 
       return { score, maxScore, isPassed };
+    }),
+  // Phase-2 generation for QUIZ / EXERCISE lessons. After the lesson's
+  // pre-assessment reading is in place (phase 1), the learner clicks
+  // "Generate quiz/exercise" and we fire an Inngest job to produce the
+  // actual question set sized to the module's level.
+  generateAssessmentQuestions: activeUserProcedure
+    .input(
+      z.object({
+        kind: z.enum(['quiz', 'exercise']),
+        id: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (input.kind === 'quiz') {
+        const quiz = await prisma.quiz.findUnique({
+          where: { id: input.id },
+          select: {
+            id: true,
+            lesson: {
+              select: {
+                id: true,
+                module: { select: { curriculum: { select: { userId: true } } } },
+              },
+            },
+          },
+        });
+        if (!quiz || quiz.lesson.module.curriculum.userId !== ctx.userId) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Quiz not found' });
+        }
+        await inngest.send({
+          name: 'app/assessment.generate',
+          data: {
+            kind: 'quiz',
+            id: quiz.id,
+            lessonId: quiz.lesson.id,
+            userId: ctx.userId,
+          },
+        });
+      } else {
+        const exercise = await prisma.exercise.findUnique({
+          where: { id: input.id },
+          select: {
+            id: true,
+            lesson: {
+              select: {
+                id: true,
+                module: { select: { curriculum: { select: { userId: true } } } },
+              },
+            },
+          },
+        });
+        if (!exercise || exercise.lesson.module.curriculum.userId !== ctx.userId) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Exercise not found' });
+        }
+        await inngest.send({
+          name: 'app/assessment.generate',
+          data: {
+            kind: 'exercise',
+            id: exercise.id,
+            lessonId: exercise.lesson.id,
+            userId: ctx.userId,
+          },
+        });
+      }
+      return { ok: true };
+    }),
+  // Generate the next batch of modules at a higher difficulty tier. Only
+  // valid when every lesson at the current top level is complete and the
+  // curriculum hasn't already hit advanced.
+  extendCurriculumLevel: activeUserProcedure
+    .input(
+      z.object({
+        curriculumId: z.string(),
+        targetLevel: z.enum(['intermediate', 'advanced']),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const curriculum = await prisma.curriculum.findFirst({
+        where: { id: input.curriculumId, userId: ctx.userId },
+        select: {
+          id: true,
+          level: true,
+          curriculumModules: {
+            select: {
+              id: true,
+              level: true,
+              lessons: {
+                select: {
+                  id: true,
+                  activityType: true,
+                  videos: { take: 1, select: { isCompleted: true } },
+                  readings: { take: 1, select: { isCompleted: true } },
+                  quizzes: { take: 1, select: { isCompleted: true } },
+                  exercises: { take: 1, select: { isCompleted: true } },
+                  projects: { take: 1, select: { isCompleted: true } },
+                  discussions: { take: 1, select: { isCompleted: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!curriculum) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Curriculum not found' });
+      }
+
+      // Highest level currently represented in the curriculum.
+      let currentTopLevel: CurriculumLevel = (curriculum.level
+        .toLowerCase() as CurriculumLevel) ?? 'beginner';
+      const present = new Set(
+        curriculum.curriculumModules.map((m) => m.level.toLowerCase() as CurriculumLevel),
+      );
+      for (const lvl of curriculumLevels) {
+        if (present.has(lvl)) currentTopLevel = lvl;
+      }
+
+      const expected = nextCurriculumLevel(currentTopLevel);
+      if (expected !== input.targetLevel) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Curriculum can only extend to ${expected ?? 'no further level'}.`,
+        });
+      }
+
+      // Every lesson at the current top level must be complete.
+      const topLevelModules = curriculum.curriculumModules.filter(
+        (m) => m.level.toLowerCase() === currentTopLevel,
+      );
+      if (topLevelModules.length === 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'No modules to extend yet.',
+        });
+      }
+      const allComplete = topLevelModules.every((m) =>
+        m.lessons.length > 0 &&
+        m.lessons.every((l) => {
+          switch (l.activityType) {
+            case 'VIDEO':
+              return l.videos[0]?.isCompleted ?? false;
+            case 'READING':
+            case 'OTHER':
+              return l.readings[0]?.isCompleted ?? false;
+            case 'QUIZ':
+              return l.quizzes[0]?.isCompleted ?? false;
+            case 'EXERCISE':
+              return l.exercises[0]?.isCompleted ?? false;
+            case 'PROJECT':
+              return l.projects[0]?.isCompleted ?? false;
+            case 'DISCUSSION':
+              return l.discussions[0]?.isCompleted ?? false;
+            default:
+              return false;
+          }
+        }),
+      );
+      if (!allComplete) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message:
+            'Complete every lesson at the current level before unlocking the next one.',
+        });
+      }
+
+      await inngest.send({
+        name: 'app/curriculum.extend_level',
+        data: {
+          curriculumId: curriculum.id,
+          userId: ctx.userId,
+          targetLevel: input.targetLevel,
+        },
+      });
+      return { ok: true };
     }),
   submitProjectUrl: protectedcProcedure
     .input(z.object({ projectId: z.string(), submissionUrl: z.url() }))

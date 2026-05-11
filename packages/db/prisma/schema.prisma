@@ -139,6 +139,11 @@ model Module {
   summary      String
   // 1-indexed position within the curriculum, used to render modules in order
   order        Int        @default(0)
+  // Which "level batch" this module belongs to: beginner / intermediate /
+  // advanced. The initial generation copies the curriculum's level; subsequent
+  // "Generate next level" runs add modules at the next tier so a single
+  // curriculum can grow through the levels over time.
+  level        String     @default("beginner")
   objectives   Json
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -222,45 +227,64 @@ model Video {
 }
 
 model Quiz {
-  id             String   @id
-  lessonId       String
-  lesson         Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  title          String
+  id                   String   @id
+  lessonId             String
+  lesson               Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title                String
+  // Topic overview shown above the deep-dive (2-4 short paragraphs).
+  overview             String   @default("")
+  // Pre-assessment reading on the lesson topic (markdown).
+  content              String   @default("")
+  // Recommended readings (Google search) and videos (YouTube search) shown
+  // alongside the reading so the learner can study before taking the quiz.
+  recommendedResources Json     @default("[]")
+  // Flips true after the learner clicks "Generate quiz" and the AI returns
+  // the question set. Until then, `questions` is `[]` and the UI shows the
+  // reading + a "Generate quiz" call-to-action.
+  questionsGenerated   Boolean  @default(false)
   // Array of QuizQuestion: { question, answers: string[], correctAnswerIndex }
-  questions      Json
+  questions            Json     @default("[]")
   // Array of indices the user submitted, parallel to questions
-  userAnswers    Json?
-  feedback       Json?
-  score          Int      @default(0)
-  maxScore       Int      @default(100)
-  passScore      Int      @default(65)
-  isPassed       Boolean  @default(false)
-  isCompleted    Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  userAnswers          Json?
+  feedback             Json?
+  score                Int      @default(0)
+  maxScore             Int      @default(100)
+  passScore            Int      @default(65)
+  isPassed             Boolean  @default(false)
+  isCompleted          Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@index([lessonId])
   @@map("quiz")
 }
 
 model Exercise {
-  id           String   @id
-  lessonId     String
-  lesson       Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  title        String
-  description  String
+  id                   String   @id
+  lessonId             String
+  lesson               Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title                String
+  description          String
+  // Topic overview shown above the deep-dive (2-4 short paragraphs).
+  overview             String   @default("")
+  // Pre-assessment reading on the lesson topic (markdown).
+  content              String   @default("")
+  // Recommended readings + videos to study before tackling the exercise.
+  recommendedResources Json     @default("[]")
+  // See Quiz.questionsGenerated.
+  questionsGenerated   Boolean  @default(false)
   // Same shape as Quiz.questions — exercises are MC assessments per spec
-  questions    Json
-  hints        Json     @default("[]")
-  userAnswers  Json?
-  score        Int      @default(0)
-  maxScore     Int      @default(100)
-  passScore    Int      @default(65)
-  isPassed     Boolean  @default(false)
-  isCompleted  Boolean  @default(false)
-  feedback     Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  questions            Json     @default("[]")
+  hints                Json     @default("[]")
+  userAnswers          Json?
+  score                Int      @default(0)
+  maxScore             Int      @default(100)
+  passScore            Int      @default(65)
+  isPassed             Boolean  @default(false)
+  isCompleted          Boolean  @default(false)
+  feedback             Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@index([lessonId])
   @@map("exercise")
@@ -591,7 +615,7 @@ enum AiUsageKind {
 // survive user deletion for ops accounting.
 model AiUsage {
   id              String      @id
-  userId          String
+  userId          String?
   user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   kind            AiUsageKind
   // Model identifier as passed to the AI SDK, e.g. "gemini-2.5-flash-lite".

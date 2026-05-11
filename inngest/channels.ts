@@ -40,6 +40,25 @@ export const userChannel = channel({
         lessonId: z.string(),
       }),
     },
+    // Fired after the phase-2 quiz/exercise question generation succeeds so
+    // the lesson page can refresh and reveal the questions section.
+    assessmentReady: {
+      schema: z.object({
+        kind: z.enum(["quiz", "exercise"]),
+        id: z.string(),
+        lessonId: z.string(),
+      }),
+    },
+    // Fired when the phase-2 question generation throws so the UI can
+    // surface the error and offer a retry.
+    assessmentFailed: {
+      schema: z.object({
+        kind: z.enum(["quiz", "exercise"]),
+        id: z.string(),
+        lessonId: z.string(),
+        message: z.string(),
+      }),
+    },
   },
 });
 
@@ -51,4 +70,6 @@ export const userChannelTopics = [
   "lessonFailed",
   "feedbackReady",
   "discussionMessageReady",
+  "assessmentReady",
+  "assessmentFailed",
 ] as const;
