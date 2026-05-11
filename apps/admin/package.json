@@ -12,6 +12,7 @@
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@quazom-ai/db": "*",
+    "@quazom-ai/emails": "*",
     "@quazom-ai/ui": "*",
     "better-auth": "^1.6.9",
     "class-variance-authority": "^0.7.1",

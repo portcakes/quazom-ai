@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { GaugeIcon, UsersIcon } from "lucide-react";
+import { GaugeIcon, MailIcon, UsersIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@quazom-ai/ui/lib/utils";
 
@@ -17,6 +17,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/", label: "Overview", icon: GaugeIcon, exact: true },
   { href: "/users", label: "Users", icon: UsersIcon },
+  { href: "/waitlist", label: "Waitlist", icon: MailIcon },
 ];
 
 export function AdminNav() {

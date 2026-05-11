@@ -24,6 +24,7 @@
         "../../packages/ui/src/components/ui/*"
       ],
       "@quazom-ai/ui/lib/utils": ["../../packages/ui/src/lib/utils.ts"],
+      "@/inngest/*": ["../../inngest/*"],
       "@/*": ["./*"]
     }
   },

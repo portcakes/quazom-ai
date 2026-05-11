@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { inngest } from "./client";
 import { userChannel } from "./channels";
 import {
@@ -15,54 +15,15 @@ import { generateObject, generateText } from "ai";
 import prisma from "@quazom-ai/db";
 import { sendAlphaInvite } from "@quazom-ai/emails";
 import { recordAiUsage } from "./ai-usage";
+import {
+  generateAlphaAccessKey,
+  getInviteBatchSize,
+  getInviteTtlMs,
+  getRegisterBaseUrl,
+} from "./alpha-keys";
 
 const google = createGoogleGenerativeAI();
 const MODEL = "gemini-2.5-flash-lite";
-
-// --------------------------------------------------------------------------
-// Alpha invite tuning knobs.
-//
-// Both come from env so the cadence and batch size can be tweaked without
-// shipping code. The defaults intentionally lean small/safe so the very
-// first cron run on a fresh deploy can't accidentally drain the entire
-// waitlist into a single Resend burst.
-// --------------------------------------------------------------------------
-const DEFAULT_INVITE_BATCH = 25;
-const DEFAULT_INVITE_TTL_DAYS = 14;
-
-function getInviteBatchSize(override?: number): number {
-  if (typeof override === "number" && override > 0) {
-    return Math.min(override, 500);
-  }
-  const fromEnv = Number(process.env.ALPHA_INVITE_BATCH);
-  if (Number.isFinite(fromEnv) && fromEnv > 0) {
-    return Math.min(fromEnv, 500);
-  }
-  return DEFAULT_INVITE_BATCH;
-}
-
-function getInviteTtlMs(): number {
-  const fromEnv = Number(process.env.ALPHA_INVITE_TTL_DAYS);
-  const days =
-    Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_INVITE_TTL_DAYS;
-  return days * 24 * 60 * 60 * 1000;
-}
-
-// URL-safe base32-ish keys grouped into 4-char chunks for legibility in the
-// alpha-invite email. The QUAZOM- prefix makes them recognisable at a glance.
-function generateAlphaAccessKey(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // omit 0/O/I/1
-  const bytes = randomBytes(12);
-  const chars: string[] = [];
-  for (const byte of bytes) {
-    chars.push(alphabet[byte % alphabet.length]!);
-  }
-  const grouped: string[] = [];
-  for (let i = 0; i < chars.length; i += 4) {
-    grouped.push(chars.slice(i, i + 4).join(""));
-  }
-  return `QUAZOM-${grouped.join("-")}`;
-}
 
 // --------------------------------------------------------------------------
 // createCurriculum
@@ -903,8 +864,7 @@ export const weeklyAlphaInvites = inngest.createFunction(
         : undefined;
     const batchSize = getInviteBatchSize(overrideBatchSize);
     const ttlMs = getInviteTtlMs();
-    const registerBaseUrl =
-      process.env.NEXT_PUBLIC_MAIN_URL ?? "http://localhost:3001";
+    const registerBaseUrl = getRegisterBaseUrl();
 
     const candidates = await step.run("load-uninvited-waitlist", async () => {
       return prisma.waitlistEntry.findMany({
