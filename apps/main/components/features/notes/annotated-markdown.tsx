@@ -1,19 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { visit } from "unist-util-visit";
 import { Trash2Icon } from "lucide-react";
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@quazom-ai/ui/components/ui/hover-card";
-import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
-  PopoverTrigger,
 } from "@quazom-ai/ui/components/ui/popover";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { useTRPC } from "@/trpc/client";
@@ -158,6 +153,32 @@ function AnnotationMark({
   const queryClient = useQueryClient();
   const isCoarsePointer = useIsCoarsePointer();
 
+  // Controlled open state. We drive the popover ourselves rather than
+  // relying on `PopoverTrigger`'s built-in click handling because:
+  //   - iOS Safari is flaky about firing `click` on inline non-button
+  //     elements even with `cursor: pointer`, so we wire `onClick` /
+  //     `onPointerUp` directly on the trigger;
+  //   - we want hover-to-open on desktop (fine pointers) without
+  //     reaching for Radix's HoverCard (which leaks the well-known
+  //     "Unable to preventDefault inside passive event listener" warning
+  //     and never actually opens on touch).
+  const [open, setOpen] = useState(false);
+  const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelHoverClose = useCallback(() => {
+    if (hoverCloseTimerRef.current) {
+      clearTimeout(hoverCloseTimerRef.current);
+      hoverCloseTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleHoverClose = useCallback(() => {
+    cancelHoverClose();
+    hoverCloseTimerRef.current = setTimeout(() => setOpen(false), 150);
+  }, [cancelHoverClose]);
+
+  useEffect(() => () => cancelHoverClose(), [cancelHoverClose]);
+
   const remove = useMutation(
     trpc.deleteAnnotation.mutationOptions({
       onSuccess: () => {
@@ -173,78 +194,99 @@ function AnnotationMark({
     }),
   );
 
-  const body = (
-    <div className="flex flex-col gap-2">
-      <p className="whitespace-pre-wrap text-sm leading-relaxed">
-        {annotation.annotation}
-      </p>
-      <div className="flex items-center justify-end">
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-7 cursor-pointer text-destructive hover:text-destructive"
-          disabled={remove.isPending}
-          onClick={() => remove.mutate({ id: annotation.id })}
-        >
-          <Trash2Icon className="size-3.5" />
-          Delete
-        </Button>
-      </div>
-    </div>
-  );
-
-  const trigger = (
-    // `mark` is the inline highlighted text. On touch we make it explicitly
-    // tappable (role=button + tabIndex) so the Popover trigger fires
-    // reliably; on desktop the cursor hint is enough.
-    <mark
-      role={isCoarsePointer ? "button" : undefined}
-      tabIndex={isCoarsePointer ? 0 : undefined}
-      className={
-        isCoarsePointer
-          ? "cursor-pointer rounded-sm bg-yellow-200/60 px-0.5 underline decoration-yellow-700/50 decoration-dotted underline-offset-4 dark:bg-yellow-400/25 dark:decoration-yellow-300/60"
-          : "cursor-help rounded-sm bg-yellow-200/60 px-0.5 underline decoration-yellow-700/50 decoration-dotted underline-offset-4 dark:bg-yellow-400/25 dark:decoration-yellow-300/60"
-      }
-    >
-      {children}
-    </mark>
-  );
-
-  // Radix HoverCard listens for pointerenter/leave through passive event
-  // listeners — on iOS Safari those never fire a "hover", so the card
-  // never opens AND the engine logs "Unable to preventDefault inside
-  // passive event listener invocation" when it tries to suppress the
-  // synthetic click. Swap in a tap-driven Popover for coarse pointers.
-  if (isCoarsePointer) {
-    return (
-      <Popover>
-        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-        <PopoverContent
-          className="w-80"
-          // Keep the page from scrolling/jumping when the popover opens
-          // from an inline element near the viewport edge.
-          collisionPadding={12}
-        >
-          {body}
-        </PopoverContent>
-      </Popover>
-    );
-  }
+  // Hover-open is desktop-only; touch users tap. Synthetic mouse events
+  // fire after touch on iOS, so gating on coarse-pointer detection keeps
+  // the popover from flickering open during a tap-and-scroll gesture.
+  const hoverProps = isCoarsePointer
+    ? {}
+    : {
+        onMouseEnter: () => {
+          cancelHoverClose();
+          setOpen(true);
+        },
+        onMouseLeave: scheduleHoverClose,
+      };
 
   return (
-    <HoverCard openDelay={120} closeDelay={120}>
-      <HoverCardTrigger asChild>{trigger}</HoverCardTrigger>
-      <HoverCardContent className="w-80">{body}</HoverCardContent>
-    </HoverCard>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <mark
+          role="button"
+          tabIndex={0}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          // Toggle on click for everyone; iOS fires `click` on elements
+          // that have an `onclick` handler attached, so wiring this here
+          // is what makes the trigger reliably tappable.
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            cancelHoverClose();
+            setOpen((prev) => !prev);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              cancelHoverClose();
+              setOpen((prev) => !prev);
+            } else if (event.key === "Escape" && open) {
+              setOpen(false);
+            }
+          }}
+          {...hoverProps}
+          className={
+            isCoarsePointer
+              ? "cursor-pointer rounded-sm bg-yellow-200/60 px-0.5 underline decoration-yellow-700/50 decoration-dotted underline-offset-4 dark:bg-yellow-400/25 dark:decoration-yellow-300/60"
+              : "cursor-help rounded-sm bg-yellow-200/60 px-0.5 underline decoration-yellow-700/50 decoration-dotted underline-offset-4 dark:bg-yellow-400/25 dark:decoration-yellow-300/60"
+          }
+        >
+          {children}
+        </mark>
+      </PopoverAnchor>
+      <PopoverContent
+        className="w-80"
+        // Prevent Radix from yanking focus into the popover on open — it
+        // would scroll the page on mobile and steal focus from the
+        // surrounding selection. The popover's own buttons stay
+        // keyboard-reachable via normal Tab order.
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        // Keep the popover from being clipped against the viewport edge
+        // when an annotation sits near the screen boundary.
+        collisionPadding={12}
+        {...(isCoarsePointer
+          ? {}
+          : {
+              onMouseEnter: cancelHoverClose,
+              onMouseLeave: scheduleHoverClose,
+            })}
+      >
+        <div className="flex flex-col gap-2">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed">
+            {annotation.annotation}
+          </p>
+          <div className="flex items-center justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 cursor-pointer text-destructive hover:text-destructive"
+              disabled={remove.isPending}
+              onClick={() => remove.mutate({ id: annotation.id })}
+            >
+              <Trash2Icon className="size-3.5" />
+              Delete
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
 /**
  * `true` when the primary input is touch (or otherwise can't hover) — i.e.
  * phones and tablets. Defaults to `false` during SSR so the desktop
- * HoverCard branch is rendered initially and we don't ship an unnecessary
- * Popover bundle to keyboard/mouse users. We then update on mount and
+ * hover-to-open branch is rendered initially. We then update on mount and
  * subscribe to changes (e.g. plugging in a mouse on a 2-in-1).
  */
 function useIsCoarsePointer(): boolean {
