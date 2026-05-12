@@ -45,6 +45,15 @@ export function UserMenu({ firstName, fullName, avatarUrl }: UserMenuProps) {
     }
   };
 
+  // Run after a successful Quick Note / New Curriculum from the menu. On
+  // mobile the off-canvas sidebar would otherwise stay on top of the new
+  // content; collapsing it lets the user see what they just created.
+  const closeMobileSidebar = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
   const initials =
     fullName
       .split(" ")
@@ -88,18 +97,31 @@ export function UserMenu({ firstName, fullName, avatarUrl }: UserMenuProps) {
         sideOffset={8}
         className="w-(--radix-dropdown-menu-trigger-width)"
       >
+        {/* New Curriculum: we keep the dropdown's default close behaviour
+            (menu collapses on click) but DON'T eagerly close the mobile
+            sidebar here. Closing the sidebar during the same tick the dialog
+            mounts lets Radix interpret the sidebar-sheet's dismissal as an
+            outside press on the dialog, which immediately closes the dialog
+            again. The dialog itself fires `onCreated` after a successful
+            submit, which is when we actually want the mobile sidebar gone. */}
         <DropdownMenuItem asChild className="cursor-pointer">
-          <NewCurriculumModal />
+          <NewCurriculumModal onCreated={closeMobileSidebar} />
         </DropdownMenuItem>
         {/* Quick Note: opens the same dialog used elsewhere in the app, with
             no scope hints so the resulting note is free-form (homepage /
             notes-page style) rather than attached to a curriculum or
-            lesson. We let the dropdown close on select; the dialog state is
-            independent so it stays open after the menu dismisses. */}
+            lesson.
+
+            We defer opening the dialog to the next tick (`setTimeout`) so the
+            DropdownMenu finishes its dismissal first. Without the defer, the
+            dropdown's outgoing "press outside" event fires after the dialog
+            mounts and Radix Dialog treats it as an outside-press, closing the
+            dialog immediately. */}
         <DropdownMenuItem
           className="cursor-pointer"
-          onSelect={() => setQuickNoteOpen(true)}
-          onClick={optionsClick}
+          onSelect={() => {
+            setTimeout(() => setQuickNoteOpen(true), 0);
+          }}
         >
           <PenSquareIcon />
           <span>Quick note</span>
@@ -134,7 +156,11 @@ export function UserMenu({ firstName, fullName, avatarUrl }: UserMenuProps) {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-    <NoteEditorDialog open={quickNoteOpen} onOpenChange={setQuickNoteOpen} />
+    <NoteEditorDialog
+      open={quickNoteOpen}
+      onOpenChange={setQuickNoteOpen}
+      onSaved={closeMobileSidebar}
+    />
     </>
   );
 }

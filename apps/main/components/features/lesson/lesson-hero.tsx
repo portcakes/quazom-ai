@@ -55,9 +55,24 @@ export function LessonHero({ lesson }: Props) {
           )}
         >
           <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-3 px-6">
-            <h2 className="min-w-0 truncate font-heading text-base font-semibold tracking-tight">
-              {lesson.title}
-            </h2>
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {/* Compact back-to-curriculum link so the user can bail out
+                  without scrolling back to the hero on long lessons. */}
+              <Link
+                href={`/curricula/${lesson.module.curriculum.id}`}
+                aria-label={`Back to ${lesson.module.curriculum.title}`}
+                className="flex shrink-0 items-center gap-1 rounded-md px-1 py-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeftIcon className="size-3.5" />
+                <span className="hidden max-w-[20ch] truncate sm:inline">
+                  {lesson.module.curriculum.title}
+                </span>
+              </Link>
+              <span className="hidden text-muted-foreground/60 sm:inline">/</span>
+              <h2 className="min-w-0 truncate font-heading text-base font-semibold tracking-tight">
+                {lesson.title}
+              </h2>
+            </div>
             <Button
               type="button"
               size="sm"

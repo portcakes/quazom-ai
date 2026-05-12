@@ -33,6 +33,7 @@ import {
 import {
   generateSchedule,
   normalizeDateFromDb,
+  startOfDayInTimezone,
   startOfLocalDay,
   type LessonForScheduling,
 } from '@/lib/schedule/generator';
@@ -385,6 +386,56 @@ export const appRouter = createTRPCRouter({
   // pre-assessment reading is in place (phase 1), the learner clicks
   // "Generate quiz/exercise" and we fire an Inngest job to produce the
   // actual question set sized to the module's level.
+  // Light-weight polling endpoint used by the QuizView as a fallback when the
+  // realtime `assessmentReady` event doesn't reach the browser (mobile sleep,
+  // tab backgrounded, flaky Wi-Fi). Returns just the boolean so the client can
+  // decide when to refetch the heavier lesson detail.
+  getAssessmentStatus: protectedcProcedure
+    .input(
+      z.object({
+        kind: z.enum(['quiz', 'exercise']),
+        id: z.string(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      if (input.kind === 'quiz') {
+        const quiz = await prisma.quiz.findUnique({
+          where: { id: input.id },
+          select: {
+            id: true,
+            questionsGenerated: true,
+            lesson: {
+              select: {
+                module: { select: { curriculum: { select: { userId: true } } } },
+              },
+            },
+          },
+        });
+        if (!quiz || quiz.lesson.module.curriculum.userId !== ctx.userId) {
+          return null;
+        }
+        return { id: quiz.id, questionsGenerated: quiz.questionsGenerated };
+      }
+      const exercise = await prisma.exercise.findUnique({
+        where: { id: input.id },
+        select: {
+          id: true,
+          questionsGenerated: true,
+          lesson: {
+            select: {
+              module: { select: { curriculum: { select: { userId: true } } } },
+            },
+          },
+        },
+      });
+      if (!exercise || exercise.lesson.module.curriculum.userId !== ctx.userId) {
+        return null;
+      }
+      return {
+        id: exercise.id,
+        questionsGenerated: exercise.questionsGenerated,
+      };
+    }),
   generateAssessmentQuestions: activeUserProcedure
     .input(
       z.object({
@@ -1233,7 +1284,13 @@ export const appRouter = createTRPCRouter({
       }));
     }),
   checkIn: protectedcProcedure.mutation(async ({ ctx }) => {
-    const today = startOfLocalDay(new Date());
+    // Anchor "today" to the learner's timezone so a user in Tokyo can check
+    // in starting at local midnight, not whenever UTC midnight happens to be.
+    const user = await prisma.user.findUnique({
+      where: { id: ctx.userId },
+      select: { timezone: true },
+    });
+    const today = startOfDayInTimezone(new Date(), user?.timezone ?? 'UTC');
 
     // Idempotent: upsert keyed on the user+date unique constraint so a
     // double-click doesn't error out.
@@ -1257,16 +1314,24 @@ export const appRouter = createTRPCRouter({
     return { ok: true };
   }),
   getStreak: protectedcProcedure.query(async ({ ctx }) => {
-    const checkIns = await prisma.checkIn.findMany({
-      where: { userId: ctx.userId },
-      orderBy: { date: 'desc' },
-      take: 365,
-      select: { date: true },
-    });
-    // Anchor each row to noon UTC so the streak compares against today
-    // (also noon UTC) on the user's local calendar day.
+    const [user, checkIns] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: ctx.userId },
+        select: { timezone: true },
+      }),
+      prisma.checkIn.findMany({
+        where: { userId: ctx.userId },
+        orderBy: { date: 'desc' },
+        take: 365,
+        select: { date: true },
+      }),
+    ]);
+    // Anchor each row to noon UTC of the user's local calendar day so "today"
+    // / "yesterday" comparisons line up with the timezone the user lives in.
+    const tz = user?.timezone ?? 'UTC';
     const summary = computeStreak(
       checkIns.map((c) => normalizeDateFromDb(c.date)),
+      startOfDayInTimezone(new Date(), tz),
     );
     return {
       streak: summary.streak,
@@ -1288,6 +1353,7 @@ export const appRouter = createTRPCRouter({
         image: true,
         isAlpha: true,
         isDisabled: true,
+        timezone: true,
       },
     });
     if (!user) {
@@ -1356,6 +1422,38 @@ export const appRouter = createTRPCRouter({
           email: true,
           image: true,
         },
+      });
+      return updated;
+    }),
+  // Dedicated mutation so the timezone picker in Settings can save without
+  // dragging the profile form's validation along. Validated against the
+  // runtime's IANA list to keep junk values out of the column.
+  updateTimezone: activeUserProcedure
+    .input(
+      z.object({
+        timezone: z
+          .string()
+          .min(1, 'Timezone is required')
+          .max(64, 'Timezone is too long')
+          .refine(
+            (v) => {
+              try {
+                // Throws on invalid IANA names; cheap on valid ones.
+                new Intl.DateTimeFormat('en-US', { timeZone: v });
+                return true;
+              } catch {
+                return false;
+              }
+            },
+            { message: 'Pick a valid timezone' },
+          ),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const updated = await prisma.user.update({
+        where: { id: ctx.userId },
+        data: { timezone: input.timezone },
+        select: { id: true, timezone: true },
       });
       return updated;
     }),

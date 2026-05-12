@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -29,11 +29,14 @@ import {
   FormMessage,
 } from "@quazom-ai/ui/components/ui/form";
 import { Input } from "@quazom-ai/ui/components/ui/input";
+import { Label } from "@quazom-ai/ui/components/ui/label";
 import { Spinner } from "@quazom-ai/ui/components/ui/spinner";
 import { useTRPC } from "@/trpc/client";
 import { DisableAccountDialog } from "./disable-account-dialog";
 import { DeleteAccountDialog } from "./delete-account-dialog";
 import { UsageMeter } from "./usage-meter";
+import { ThemePicker } from "@/components/shared/theme-picker";
+import { TimezonePicker } from "@/components/shared/timezone-picker";
 
 const profileSchema = z.object({
   name: z
@@ -57,6 +60,7 @@ type Props = {
     email: string;
     avatarUrl: string | null;
     isAlpha: boolean;
+    timezone: string;
   };
 };
 
@@ -75,9 +79,55 @@ export function SettingsView({ initialUser }: Props) {
       image: initialUser.avatarUrl,
       isAlpha: initialUser.isAlpha,
       isDisabled: false,
+      timezone: initialUser.timezone,
     },
   });
   const profile = profileQuery.data;
+
+  // Auto-set the user's timezone the first time they hit Settings if they're
+  // still on the UTC default — saves them the trouble of finding their own
+  // zone in the list. The detection runs on the client (`Intl.DateTimeFormat`
+  // resolved zone) so it matches what their browser thinks they're in.
+  const updateTimezone = useMutation(
+    trpc.updateTimezone.mutationOptions({
+      onSuccess: (data) => {
+        queryClient.setQueryData(trpc.getProfile.queryKey(), (prev) =>
+          prev ? { ...prev, timezone: data.timezone } : prev,
+        );
+      },
+      onError: (err) =>
+        toast.error(err.message ?? "Failed to update timezone"),
+    }),
+  );
+  useEffect(() => {
+    if (profile.timezone && profile.timezone !== "UTC") return;
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!detected || detected === "UTC") return;
+    if (detected === profile.timezone) return;
+    // Optimistically update the UI so the user sees their detected zone
+    // before the round trip completes.
+    queryClient.setQueryData(trpc.getProfile.queryKey(), (prev) =>
+      prev ? { ...prev, timezone: detected } : prev,
+    );
+    updateTimezone.mutate({ timezone: detected });
+    // Intentionally only runs once per profile load — the dependency list
+    // pins to the timezone we just observed so this effect doesn't re-fire
+    // after the optimistic update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.timezone]);
+
+  const handleTimezoneChange = (tz: string) => {
+    if (tz === profile.timezone) return;
+    queryClient.setQueryData(trpc.getProfile.queryKey(), (prev) =>
+      prev ? { ...prev, timezone: tz } : prev,
+    );
+    updateTimezone.mutate(
+      { timezone: tz },
+      {
+        onSuccess: () => toast.success("Timezone updated"),
+      },
+    );
+  };
 
   const usageQuery = useQuery(trpc.getAlphaUsage.queryOptions());
 
@@ -204,6 +254,46 @@ export function SettingsView({ initialUser }: Props) {
               </div>
             </form>
           </Form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Preferences</CardTitle>
+          <CardDescription>
+            Pick a theme and tell us where you live so streaks and daily
+            check-ins follow your calendar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-3">
+              <Label className="text-sm font-medium">Appearance</Label>
+              <p className="text-xs text-muted-foreground">
+                Choose how Quazom looks. The change fades in across the app —
+                no reload required.
+              </p>
+              <ThemePicker idPrefix="settings-theme" />
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Label htmlFor="timezone-input" className="text-sm font-medium">
+                Timezone
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Daily check-ins unlock at midnight in your timezone. We try to
+                detect this from your browser; override it if we got it wrong.
+              </p>
+              <TimezonePicker
+                value={profile.timezone ?? "UTC"}
+                onChange={handleTimezoneChange}
+                disabled={updateTimezone.isPending}
+              />
+              <p className="text-xs text-muted-foreground">
+                Current: <span className="font-mono">{profile.timezone ?? "UTC"}</span>
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

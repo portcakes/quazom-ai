@@ -200,3 +200,22 @@
     @apply font-sans;
   }
 }
+
+/* Smoothly cross-fade theme-driven colours when the user (or the OS) toggles
+   light ↔ dark. Limited to colour-bearing properties so non-colour transitions
+   (transforms, opacity, etc.) stay snappy. We disable the transition during
+   the initial paint via the `.theme-loaded` class so users don't see a flash
+   of the previous theme animating in.
+
+   prefers-reduced-motion takes precedence so users with that setting still
+   get an instant swap. */
+@media (prefers-reduced-motion: no-preference) {
+  html.theme-loaded *,
+  html.theme-loaded *::before,
+  html.theme-loaded *::after {
+    transition-property: background-color, color, border-color, fill, stroke,
+      box-shadow;
+    transition-duration: 250ms;
+    transition-timing-function: ease;
+  }
+}

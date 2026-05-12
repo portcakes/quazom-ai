@@ -33,6 +33,7 @@ export default async function SettingsPage() {
             email: user.email,
             avatarUrl: user.avatarUrl,
             isAlpha: user.isAlpha,
+            timezone: user.timezone,
           }}
         />
       </section>

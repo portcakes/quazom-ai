@@ -8,8 +8,16 @@ import { dayKey, startOfLocalDay } from "./generator";
  *
  * The "streak still alive if you checked in yesterday but not today" rule
  * means the user can lose their streak by failing to check in tomorrow.
+ *
+ * `today` is expected to be a noon-UTC anchor for the user's local calendar
+ * day. Callers in tRPC supply this via `startOfDayInTimezone(now, userTz)`;
+ * the default falls back to the server's local zone for callers that don't
+ * care about user-tz fidelity (tests, etc.).
  */
-export function computeStreak(checkInDates: Date[], now: Date = new Date()): {
+export function computeStreak(
+  checkInDates: Date[],
+  today: Date = startOfLocalDay(new Date()),
+): {
   streak: number;
   checkedInToday: boolean;
   lastCheckIn: Date | null;
@@ -18,9 +26,8 @@ export function computeStreak(checkInDates: Date[], now: Date = new Date()): {
     return { streak: 0, checkedInToday: false, lastCheckIn: null };
   }
 
-  const today = startOfLocalDay(now);
   const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
 
   // Dedupe by day key in case of accidental dupes, preserve order.
   const uniqueDays: Date[] = [];

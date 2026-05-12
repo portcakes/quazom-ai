@@ -30,6 +30,47 @@ export function startOfLocalDay(date: Date): Date {
 }
 
 /**
+ * Same idea as `startOfLocalDay`, but the calendar day is computed in the
+ * supplied IANA timezone rather than the runtime's local zone. Used by the
+ * check-in / streak logic so a learner in Tokyo gets a fresh day at midnight
+ * Tokyo time, not midnight wherever the server happens to be running.
+ *
+ * If the timezone string is invalid we fall back to UTC so a corrupted user
+ * preference can't crash the check-in flow.
+ */
+export function startOfDayInTimezone(date: Date, timezone: string): Date {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const lookup = Object.fromEntries(
+      parts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]),
+    ) as Record<string, string>;
+    const year = Number(lookup.year);
+    const month = Number(lookup.month);
+    const day = Number(lookup.day);
+    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+      return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+    }
+  } catch {
+    // Unknown timezone string — fall through to UTC.
+  }
+  return new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      12,
+      0,
+      0,
+    ),
+  );
+}
+
+/**
  * Re-anchor a Date returned from a Postgres `DATE` column (which Prisma
  * deserialises as UTC midnight) to noon UTC of the same calendar day.
  *

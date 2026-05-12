@@ -12,6 +12,7 @@ export type CurrentUser = {
   avatarUrl: string | null;
   isAlpha: boolean;
   isDisabled: boolean;
+  timezone: string;
 };
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
@@ -27,6 +28,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       image: true,
       isAlpha: true,
       isDisabled: true,
+      timezone: true,
     },
   });
   if (!user) return null;
@@ -41,5 +43,6 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     avatarUrl: user.image,
     isAlpha: user.isAlpha,
     isDisabled: user.isDisabled,
+    timezone: user.timezone,
   };
 }

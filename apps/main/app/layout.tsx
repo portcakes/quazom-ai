@@ -6,6 +6,7 @@ import { TooltipProvider } from "@quazom-ai/ui/components/ui/tooltip";
 import { TRPCReactProvider } from "@/trpc/client";
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
+import { ThemeProvider } from "@/components/shared/theme-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,12 +32,15 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        <TRPCReactProvider>
-          <TooltipProvider>{children}</TooltipProvider>
-        </TRPCReactProvider>
-        <Toaster />
+        <ThemeProvider>
+          <TRPCReactProvider>
+            <TooltipProvider>{children}</TooltipProvider>
+          </TRPCReactProvider>
+          <Toaster />
+        </ThemeProvider>
         <Analytics />
         <SpeedInsights />
       </body>

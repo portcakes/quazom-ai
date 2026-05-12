@@ -29,7 +29,16 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-const NewCurriculumModal = () => {
+type Props = {
+  /**
+   * Optional callback fired after a curriculum has been queued for creation.
+   * The mobile sidebar uses this to dismiss itself so the user lands on the
+   * new curriculum without the off-canvas sheet still covering the screen.
+   */
+  onCreated?: () => void;
+};
+
+const NewCurriculumModal = ({ onCreated }: Props = {}) => {
   const [open, setOpen] = useState(false);
   const trpc = useTRPC();
   const router = useRouter();
@@ -51,6 +60,7 @@ const NewCurriculumModal = () => {
         toast.success("Curriculum creation started");
         form.reset();
         setOpen(false);
+        onCreated?.();
         router.push(`/curricula/${variables.id}`);
       },
       onError: (error) => {

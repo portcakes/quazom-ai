@@ -40,6 +40,11 @@ model User {
   // the end of onboarding. Single-column for now; if the survey grows we'll
   // promote this to its own table.
   referralSource  String?
+  // IANA timezone identifier (e.g. "America/Los_Angeles"). Used to anchor
+  // daily check-ins to the learner's local calendar day so a user in Tokyo
+  // doesn't have to wait until lunchtime UTC for a fresh check-in to unlock.
+  // Defaults to UTC; the settings page surfaces this so users can override.
+  timezone        String            @default("UTC")
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   sessions        Session[]

@@ -164,7 +164,7 @@ export const videoContentSchema = z.object({
   overview: z
     .string()
     .describe(
-      "AI-written overview shown above the embed: what the video covers, key takeaways, watch tips. 2-4 short paragraphs.",
+      "AI-written overview of the topic. 4-6 paragraphs.",
     ),
   // The LLM may not know real video URLs. We accept either an embed URL (we'll
   // try to embed YouTube, otherwise fall back) and/or an external link.

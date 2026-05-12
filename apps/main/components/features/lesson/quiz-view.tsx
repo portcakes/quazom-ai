@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRealtime } from "inngest/react";
 import { toast } from "sonner";
 import {
@@ -184,6 +184,34 @@ function QuestionsSection({
     },
   });
 
+  // Polling fallback for the assessmentReady realtime event. Realtime is the
+  // happy path, but on backgrounded tabs / flaky networks the message can
+  // arrive late or not at all — without a poll the page just sits on
+  // "Generating…" until the user reloads manually. Once questions land we
+  // refresh and stop polling.
+  const statusQuery = useQuery(
+    trpc.getAssessmentStatus.queryOptions(
+      { kind, id: data.id },
+      {
+        enabled: waiting && !data.questionsGenerated,
+        refetchInterval: (q) => {
+          const status = q.state.data;
+          if (status?.questionsGenerated) return false;
+          return 3_000;
+        },
+        refetchIntervalInBackground: true,
+      },
+    ),
+  );
+  useEffect(() => {
+    if (!waiting) return;
+    if (statusQuery.data?.questionsGenerated) {
+      setWaiting(false);
+      router.refresh();
+      void queryClient.invalidateQueries();
+    }
+  }, [statusQuery.data?.questionsGenerated, waiting, router, queryClient]);
+
   const lastReadyKey = useRef<string | null>(null);
   useEffect(() => {
     const ready = messages.byTopic.assessmentReady;
@@ -237,7 +265,7 @@ function QuestionsSection({
           </h3>
           <p className="text-sm text-muted-foreground">
             When you&apos;ve studied the material above, generate the{" "}
-            {kind === "quiz" ? "quiz" : "exercise"} questions. They&apos;re
+            {kind === "quiz" ? "quiz" : "exercise"} {" "}questions. They&apos;re
             sized to the module&apos;s level.
           </p>
         </div>
