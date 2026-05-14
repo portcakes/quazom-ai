@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -107,7 +107,20 @@ export function ResourceViewer({ initial }: Props) {
   const isMarkdownish =
     data.fileType === "MD" || data.fileType === "TXT";
   const isPdf = data.fileType === "PDF";
-  const hasReader = isLink ? Boolean(data.content) : isMarkdownish;
+  const isFile = data.kind === "FILE";
+  // Reader mode is the "extracted-text-rendered-as-markdown" view that
+  // powers highlights + annotations. It's available wherever we can
+  // produce a text body:
+  //   - LINK: after the URL is fetched + run through Readability
+  //           (auto-triggered on first viewer open below).
+  //   - TXT / MD: immediately — the body is cached on Resource.content
+  //               during confirmResourceUpload.
+  //   - PDF: after pdf.js extracts a per-page text body during upload
+  //          confirmation (auto-retried on first viewer open if the
+  //          confirm-time extraction failed or the file pre-dates the
+  //          PDF extractor). Image-only PDFs stay empty until OCR.
+  const supportsReader = isLink || isMarkdownish || isPdf;
+  const hasReaderContent = Boolean(data.content && data.content.trim().length);
   // FILE resources are streamed through our own /api proxy route — that's
   // far more reliable as an iframe source than the raw R2 signed URL, which
   // Chrome's PDF viewer routinely refuses to render. The server-side query
@@ -118,23 +131,91 @@ export function ResourceViewer({ initial }: Props) {
       : null;
   const hasIframe = isLink ? Boolean(data.url) : Boolean(fileProxyUrl);
 
-  const [mode, setMode] = useState<ViewMode>(hasReader ? "reader" : "iframe");
+  const [mode, setMode] = useState<ViewMode>(
+    supportsReader ? "reader" : "iframe",
+  );
   useEffect(() => {
-    if (mode === "reader" && !hasReader && hasIframe) setMode("iframe");
-    if (mode === "iframe" && !hasIframe && hasReader) setMode("reader");
-  }, [hasIframe, hasReader, mode]);
+    if (mode === "reader" && !supportsReader && hasIframe) setMode("iframe");
+    if (mode === "iframe" && !hasIframe && supportsReader) setMode("reader");
+  }, [hasIframe, supportsReader, mode]);
 
-  const extract = useMutation(
+  // Tracks whether the *current* extraction attempt was kicked off by the
+  // user vs. our auto-extract effect. Auto-runs stay quiet; explicit
+  // clicks get a success toast so the user gets confirmation.
+  const userInitiatedExtract = useRef(false);
+  const extractLink = useMutation(
     trpc.extractResourceLink.mutationOptions({
       onSuccess: () => {
-        toast.success("Reader view ready");
+        if (userInitiatedExtract.current) toast.success("Reader view ready");
+        userInitiatedExtract.current = false;
         void queryClient.invalidateQueries({
           queryKey: trpc.getResource.pathKey(),
         });
       },
-      onError: (e) => toast.error(e.message ?? "Couldn't fetch reader view"),
+      onError: (e) => {
+        // Auto-extract failures shouldn't fire a toast — the reader-tab
+        // body already shows the error with a retry button.
+        if (userInitiatedExtract.current) {
+          toast.error(e.message ?? "Couldn't fetch reader view");
+        }
+        userInitiatedExtract.current = false;
+      },
     }),
   );
+  const extractFile = useMutation(
+    trpc.extractResourceFile.mutationOptions({
+      onSuccess: () => {
+        if (userInitiatedExtract.current) toast.success("Reader view ready");
+        userInitiatedExtract.current = false;
+        void queryClient.invalidateQueries({
+          queryKey: trpc.getResource.pathKey(),
+        });
+      },
+      onError: (e) => {
+        if (userInitiatedExtract.current) {
+          toast.error(e.message ?? "Couldn't extract this file");
+        }
+        userInitiatedExtract.current = false;
+      },
+    }),
+  );
+
+  // Pick the right extractor for this resource. LINK runs Readability
+  // against the URL; FILE re-reads R2 + (for PDF) runs pdf.js.
+  const extract = isLink ? extractLink : extractFile;
+
+  // Auto-trigger extraction whenever a resource that supports reader mode
+  // arrives with no cached content. Originally only fired for LINKs (per
+  // the `createResourceLink` "lazy on first open" comment that was never
+  // implemented); now also covers PDFs uploaded before the PDF extractor
+  // existed and any TXT/MD/PDF whose confirm-time extraction failed.
+  // Guarded by a ref so it only fires once per resource id even across
+  // re-renders, and gated by `statusMessage` so an image-only PDF doesn't
+  // keep getting re-parsed on every viewer open just to yield no text
+  // again — those cases need a deliberate user click on Re-extract.
+  const autoExtractedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!supportsReader) return;
+    if (data.status !== "READY") return;
+    if (hasReaderContent) return;
+    if (extract.isPending) return;
+    if (data.statusMessage) return;
+    if (autoExtractedFor.current === data.id) return;
+    autoExtractedFor.current = data.id;
+    extract.mutate({ id: data.id });
+  }, [
+    supportsReader,
+    data.status,
+    data.id,
+    hasReaderContent,
+    data.statusMessage,
+    extract,
+  ]);
+
+  const requestExtract = (force = false) => {
+    userInitiatedExtract.current = true;
+    extract.mutate({ id: data.id, force });
+  };
 
   const remove = useMutation(
     trpc.deleteResource.mutationOptions({
@@ -217,7 +298,7 @@ export function ResourceViewer({ initial }: Props) {
                   </a>
                 </Button>
               ) : null}
-              {isLink ? (
+              {supportsReader ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -226,7 +307,7 @@ export function ResourceViewer({ initial }: Props) {
                       size="sm"
                       className="cursor-pointer"
                       disabled={extract.isPending}
-                      onClick={() => extract.mutate({ id: data.id })}
+                      onClick={() => requestExtract(true)}
                     >
                       {extract.isPending ? (
                         <Loader2Icon className="size-4 animate-spin" />
@@ -237,7 +318,11 @@ export function ResourceViewer({ initial }: Props) {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    Regenerate the reader-mode text from this URL.
+                    {isLink
+                      ? "Regenerate the reader-mode text from this URL."
+                      : isPdf
+                        ? "Re-run PDF text extraction for reader mode."
+                        : "Re-read the file body and refresh reader mode."}
                   </TooltipContent>
                 </Tooltip>
               ) : null}
@@ -275,7 +360,7 @@ export function ResourceViewer({ initial }: Props) {
           className="flex flex-col gap-4"
         >
           <TabsList className="self-start">
-            <TabsTrigger value="reader" disabled={!hasReader}>
+            <TabsTrigger value="reader" disabled={!supportsReader}>
               Reader mode
             </TabsTrigger>
             <TabsTrigger value="iframe" disabled={!hasIframe}>
@@ -284,7 +369,7 @@ export function ResourceViewer({ initial }: Props) {
           </TabsList>
 
           <TabsContent value="reader" className="min-w-0">
-            {hasReader ? (
+            {hasReaderContent ? (
               <Highlightable target={{ kind: "resource", resourceId: data.id }}>
                 <article className="max-w-none">
                   <AnnotatedMarkdown annotations={annotations}>
@@ -292,15 +377,17 @@ export function ResourceViewer({ initial }: Props) {
                   </AnnotatedMarkdown>
                 </article>
               </Highlightable>
-            ) : isLink ? (
-              <NoReaderEmpty
-                onExtract={() => extract.mutate({ id: data.id })}
-                pending={extract.isPending}
-              />
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Reader mode isn't available for this file type.
-              </p>
+              <ReaderEmptyState
+                isLink={isLink}
+                isPdf={isPdf}
+                isMarkdownish={isMarkdownish}
+                isFile={isFile}
+                pending={extract.isPending}
+                statusMessage={data.statusMessage}
+                error={extract.error?.message ?? null}
+                onRetry={() => requestExtract(true)}
+              />
             )}
           </TabsContent>
 
@@ -349,30 +436,155 @@ export function ResourceViewer({ initial }: Props) {
   );
 }
 
-function NoReaderEmpty({
-  onExtract,
+/**
+ * Rendered inside the Reader tab whenever `Resource.content` is missing —
+ * picks the appropriate copy + affordance for each case:
+ *   - Currently extracting (any kind): spinner + status copy.
+ *   - PDF that returned no text (image-only / OCR not supported yet):
+ *     surfaces the status message from the server.
+ *   - LINK / FILE that errored: surfaces the error with a retry button.
+ *   - LINK that has never been extracted: explicit "Fetch reader view"
+ *     button (auto-extract should normally do this transparently).
+ *   - TXT / MD without cached body: prompts the user to re-extract from
+ *     the header button (transient R2 read failure during upload).
+ */
+function ReaderEmptyState({
+  isLink,
+  isPdf,
+  isMarkdownish,
+  isFile,
   pending,
+  statusMessage,
+  error,
+  onRetry,
 }: {
-  onExtract: () => void;
+  isLink: boolean;
+  isPdf: boolean;
+  isMarkdownish: boolean;
+  isFile: boolean;
   pending: boolean;
+  statusMessage: string | null;
+  error: string | null;
+  onRetry: () => void;
 }) {
+  const box =
+    "flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-card/40 p-8 text-center";
+
+  if (pending) {
+    const label = isLink
+      ? "Extracting article…"
+      : isPdf
+        ? "Extracting text from this PDF…"
+        : "Reading file body…";
+    return (
+      <div className={box}>
+        <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">
+          {label} this usually takes a few seconds.
+        </p>
+      </div>
+    );
+  }
+
+  // `statusMessage` is the server's last word on why extraction didn't
+  // produce content — we trust it for both the "image-only PDF" case and
+  // the "transient R2 read failure" case. Surface it verbatim so the user
+  // sees the same wording the API decided on.
+  if (isPdf && statusMessage) {
+    return (
+      <div className={box}>
+        <p className="text-sm text-muted-foreground">{statusMessage}</p>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="cursor-pointer"
+          onClick={onRetry}
+        >
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={box}>
+        <p className="text-sm text-destructive">
+          Couldn't extract this {isLink ? "article" : "file"}: {error}
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          className="cursor-pointer"
+          onClick={onRetry}
+        >
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  if (isLink) {
+    return (
+      <div className={box}>
+        <p className="text-sm text-muted-foreground">
+          Reader mode hasn't been generated yet. Pull a clean copy of this page
+          so you can highlight and quote it.
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          className="cursor-pointer"
+          onClick={onRetry}
+        >
+          Fetch reader view
+        </Button>
+      </div>
+    );
+  }
+
+  if (isPdf) {
+    return (
+      <div className={box}>
+        <p className="text-sm text-muted-foreground">
+          Reader mode hasn't been generated yet. Extract the text from this PDF
+          so you can highlight and quote passages.
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          className="cursor-pointer"
+          onClick={onRetry}
+        >
+          Extract PDF text
+        </Button>
+      </div>
+    );
+  }
+
+  if (isMarkdownish || isFile) {
+    return (
+      <div className={box}>
+        <p className="text-sm text-muted-foreground">
+          We couldn't read the text body of this file when it was uploaded.
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          className="cursor-pointer"
+          onClick={onRetry}
+        >
+          Re-extract
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-card/40 p-8 text-center">
-      <p className="text-sm text-muted-foreground">
-        Reader mode hasn't been generated yet. Pull a clean copy of this page
-        so you can highlight and quote it.
-      </p>
-      <Button
-        type="button"
-        size="sm"
-        className="cursor-pointer"
-        onClick={onExtract}
-        disabled={pending}
-      >
-        {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
-        Fetch reader view
-      </Button>
-    </div>
+    <p className="text-sm text-muted-foreground">
+      Reader mode isn't available for this resource.
+    </p>
   );
 }
 

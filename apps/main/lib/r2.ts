@@ -177,6 +177,36 @@ export async function getObjectText(key: string): Promise<string> {
   return await stream.transformToString("utf-8");
 }
 
+/**
+ * Read the object body as raw bytes (used for PDF text extraction — pdf.js
+ * needs the whole buffer up-front because it parses xref tables backwards).
+ * Returns `null` if the object isn't in the bucket.
+ */
+export async function getObjectBytes(
+  key: string,
+): Promise<Uint8Array | null> {
+  const { bucket } = readConfig();
+  const client = getClient();
+  try {
+    const res = await client.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    );
+    if (!res.Body) return null;
+    const body = res.Body as unknown as {
+      transformToByteArray: () => Promise<Uint8Array>;
+    };
+    return await body.transformToByteArray();
+  } catch (err) {
+    if (
+      (err as { $metadata?: { httpStatusCode?: number } }).$metadata
+        ?.httpStatusCode === 404
+    ) {
+      return null;
+    }
+    throw err;
+  }
+}
+
 export type R2ObjectStream = {
   stream: ReadableStream<Uint8Array>;
   contentType: string | null;

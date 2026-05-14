@@ -31,12 +31,14 @@ import {
 } from '@/inngest/schemas';
 import {
   deleteObject as r2DeleteObject,
+  getObjectBytes,
   getObjectText,
   getSignedDownloadUrl,
   getSignedUploadUrl,
   headObject,
   r2IsConfigured,
 } from '@/lib/r2';
+import { extractPdfText } from '@/lib/pdf';
 import { extractArticle, safeHostname } from '@/lib/readability';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
@@ -1662,26 +1664,155 @@ export const appRouter = createTRPCRouter({
           message: 'Upload did not arrive at R2 — please try again.',
         });
       }
-      // For TXT/MD we eagerly fetch the body and cache it as markdown so
-      // the viewer can render + annotate without a per-view R2 round trip.
+      // Eagerly produce the reader-mode body so the viewer can render +
+      // annotate without a per-view R2 round trip:
+      //   - TXT / MD: read the raw bytes as UTF-8 (effectively free).
+      //   - PDF: read the bytes and run pdf.js text extraction, which
+      //     synthesises a "## Page N" markdown skeleton. This typically
+      //     adds a few hundred ms for a small doc, more for big ones —
+      //     well inside the time the user is already waiting on the
+      //     confirm round trip.
+      // Failures here are non-fatal: the row still flips to READY and the
+      // viewer's `extractResourceFile` mutation can be retried later.
       let content: string | null = null;
+      let statusMessage: string | null = null;
       if (resource.fileType === 'TXT' || resource.fileType === 'MD') {
         try {
           const body = await getObjectText(resource.fileKey);
           content = body.slice(0, 200_000);
         } catch (err) {
           console.warn('Failed to read uploaded text body from R2', err);
+          statusMessage = 'We saved the file but couldn’t cache its text body — try Re-extract from the viewer.';
+        }
+      } else if (resource.fileType === 'PDF') {
+        try {
+          const bytes = await getObjectBytes(resource.fileKey);
+          if (bytes) {
+            const parsed = await extractPdfText(bytes);
+            content = parsed.markdown || null;
+            if (parsed.isImageOnly) {
+              statusMessage =
+                'This PDF appears to be image-only (no embedded text). Reader mode will be empty until OCR support lands.';
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to extract PDF text from R2', err);
+          statusMessage =
+            'We saved the PDF but couldn’t extract its text — Reader mode will be empty until you Re-extract.';
         }
       }
       await prisma.resource.update({
         where: { id: resource.id },
         data: {
           status: 'READY',
-          statusMessage: null,
+          statusMessage,
           content,
+          extractedAt: content ? new Date() : null,
         },
       });
       return { ok: true };
+    }),
+
+  // Re-run reader-mode extraction for an already-uploaded FILE resource.
+  // Used by the viewer's "Re-extract" button and by the auto-extract effect
+  // when a PDF/TXT/MD lacks cached content (most commonly: a PDF that was
+  // uploaded before this extractor existed, or one where the extraction
+  // step transiently failed during confirmResourceUpload).
+  extractResourceFile: activeUserProcedure
+    .input(z.object({ id: z.string(), force: z.boolean().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const resource = await prisma.resource.findFirst({
+        where: { id: input.id, userId: ctx.userId, kind: 'FILE' },
+        select: {
+          id: true,
+          fileKey: true,
+          fileType: true,
+          content: true,
+          extractedAt: true,
+        },
+      });
+      if (!resource || !resource.fileKey || !resource.fileType) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Resource not found' });
+      }
+      if (
+        !input.force &&
+        resource.content &&
+        resource.content.trim().length > 0 &&
+        resource.extractedAt
+      ) {
+        return {
+          ok: true as const,
+          cached: true as const,
+          extractedAt: resource.extractedAt,
+        };
+      }
+      if (!r2IsConfigured()) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'R2 storage is not configured on the server.',
+        });
+      }
+
+      try {
+        let content: string | null = null;
+        let isImageOnly = false;
+        if (resource.fileType === 'TXT' || resource.fileType === 'MD') {
+          const body = await getObjectText(resource.fileKey);
+          content = body.slice(0, 200_000) || null;
+        } else if (resource.fileType === 'PDF') {
+          const bytes = await getObjectBytes(resource.fileKey);
+          if (!bytes) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'The PDF is missing from storage.',
+            });
+          }
+          const parsed = await extractPdfText(bytes);
+          content = parsed.markdown || null;
+          isImageOnly = parsed.isImageOnly;
+        } else {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Reader-mode extraction isn’t supported for ${resource.fileType} files.`,
+          });
+        }
+
+        await prisma.resource.update({
+          where: { id: resource.id },
+          data: {
+            content,
+            extractedAt: content ? new Date() : null,
+            statusMessage: isImageOnly
+              ? 'This PDF appears to be image-only (no embedded text).'
+              : null,
+          },
+        });
+
+        if (!content) {
+          throw new TRPCError({
+            code: 'UNPROCESSABLE_CONTENT',
+            message: isImageOnly
+              ? 'This PDF has no embedded text — only scanned images. OCR isn’t supported yet.'
+              : 'No readable text could be extracted from this file.',
+          });
+        }
+
+        return {
+          ok: true as const,
+          cached: false as const,
+          extractedAt: new Date(),
+          isImageOnly,
+        };
+      } catch (err) {
+        if (err instanceof TRPCError) throw err;
+        const message =
+          err instanceof Error ? err.message : 'Extraction failed';
+        await prisma.resource.update({
+          where: { id: resource.id },
+          data: { statusMessage: message.slice(0, 500) },
+        });
+        throw new TRPCError({ code: 'BAD_GATEWAY', message });
+      }
     }),
 
   // Reader-mode extraction for LINK resources. Caches the result so
