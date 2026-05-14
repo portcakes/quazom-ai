@@ -9,9 +9,47 @@ import {
   SparklesIcon,
 } from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
+import { CyclingTagline } from "@/components/hero/cycling-tagline";
 import { WaitlistForm } from "@/components/waitlist/waitlist-form";
 
 const MAIN_URL = process.env.NEXT_PUBLIC_MAIN_URL || "http://localhost:3001";
+
+const HERO_TAGLINES = [
+  "curious people.",
+  "lifelong learners.",
+  "those who love to learn.",
+  "AuDHD rabbit holers.",
+  "autodidacts.",
+  "neurospicy researchers.",
+  "science enthusiasts.",
+  "polymaths of all trades.",
+  "prospective MENSA members.",
+  "tinkering tinkerers.",
+  "DIY enthusiasts.",
+  "bored Uni students.",
+  "innovative game devs.",
+  "3AM insomniacs.",
+  "PhD barristas.",
+  "startup founders.",
+  "big cat lovers.",
+  "small dog owners.",
+  "plant parents.",
+  "music lovers.",
+  "French movie buffs.",
+  "bookworms.",
+  "podcast addicts.",
+  "occult enthusiasts.",
+  "cryptozoologists.",
+  "conlang inventors.",
+  "medieval history buffs.",
+  "Harlem Rennaissance historians.",
+  "stage magicians.",
+  "you.",
+  "neurodiverse learners.",
+  "retro futurists.",
+  "wizards on a journey.",
+  "witches in training.",
+] as const;
 
 const features = [
   {
@@ -92,6 +130,11 @@ function SiteHeader() {
 }
 
 function HeroSection() {
+  const demoVideoUrl = "https://youtu.be/7Pf4W9E-NKc";
+  // Pick the first tagline on the server so the SSR HTML and the first client
+  // render agree; the CyclingTagline component takes over and rotates from there.
+  const initialTaglineIndex = Math.floor(Math.random() * HERO_TAGLINES.length);
+
   return (
     <section className="relative overflow-hidden border-b border-border/60 bg-linear-to-b from-muted/40 via-background to-background">
       <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-12 px-6 pt-16 pb-12 text-center sm:pt-20 md:pt-28 md:pb-20">
@@ -103,13 +146,23 @@ function HeroSection() {
           <h1 className="font-heading text-4xl leading-[1.05] font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl lg:text-7xl">
             Personal curricula,
             <br className="hidden sm:block" />
-            <span className="italic text-primary"> built around you.</span>
+            <span className="italic text-primary">
+              {" "}
+              built for
+              <br className="hidden sm:block" />
+              <CyclingTagline
+                taglines={HERO_TAGLINES}
+                initialIndex={initialTaglineIndex}
+                intervalMs={3000}
+              />
+            </span>
           </h1>
           <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg md:text-xl">
             Tell Quazom what you want to learn. We&rsquo;ll handcraft the
             modules, lessons, exercises, and quizzes—then keep you on track with
             a daily schedule, streaks, and notes that travel with you.
           </p>
+          <h2 className="font-heading text-2xl leading-tight tracking-tight text-foreground sm:text-3xl"> Watch the Demo: <a href={demoVideoUrl} target="_blank" className="underline underline-offset-2 hover:text-primary">Quazom in action</a></h2>
           <div className="mt-4 w-full max-w-xl">
             <WaitlistForm source="homepage" cta="Get my invite" />
           </div>
