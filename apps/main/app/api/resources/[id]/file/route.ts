@@ -1,7 +1,7 @@
 import { headers as nextHeaders } from "next/headers";
 import { auth } from "@/lib/auth";
 import prisma from "@quazom-ai/db";
-import { streamObject } from "@/lib/r2";
+import { r2IsConfigured, streamObject } from "@/lib/r2";
 
 // Streaming an R2 object through a Node route handler is the whole point of
 // this file — let Next.js know it's a runtime-only, fully dynamic response
@@ -57,12 +57,40 @@ export async function GET(
     return new Response("Resource not ready", { status: 425 });
   }
 
+  // Caught here separately from the streamObject call so a misconfigured
+  // deploy surfaces a clear "set your R2 env vars" message instead of a
+  // generic "upstream storage error". The viewer relays the response body
+  // when the iframe fails, so the operator sees the actual reason.
+  if (!r2IsConfigured()) {
+    console.error(
+      "[resources/file] R2 is not configured in this environment — set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET.",
+    );
+    return new Response(
+      "R2 storage is not configured on this server (missing R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_BUCKET).",
+      { status: 503 },
+    );
+  }
+
   let object: Awaited<ReturnType<typeof streamObject>>;
   try {
     object = await streamObject(resource.fileKey);
   } catch (err) {
-    console.error("[resources/file] R2 stream error", err);
-    return new Response("Upstream storage error", { status: 502 });
+    const message = err instanceof Error ? err.message : String(err);
+    const code =
+      (err as { Code?: string; name?: string }).Code ??
+      (err as { name?: string }).name ??
+      "unknown";
+    console.error("[resources/file] R2 stream error", {
+      resourceId: id,
+      fileKey: resource.fileKey,
+      code,
+      message,
+    });
+    // Include the SDK-reported error code in the body so a 502 in the
+    // iframe is debuggable from the browser without server-log access
+    // (e.g. AccessDenied → token can't read the bucket; InvalidAccessKeyId
+    // → wrong R2_ACCESS_KEY_ID; SignatureDoesNotMatch → wrong secret).
+    return new Response(`Upstream storage error (${code})`, { status: 502 });
   }
   if (!object) {
     return new Response("File missing", { status: 404 });

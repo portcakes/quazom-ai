@@ -407,14 +407,16 @@ function ResourceEmbed({
           key={src}
           src={src}
           title={title}
-          // Sandbox keeps third-party scripts from poking at our auth cookies.
-          // We grant just enough capability for PDF viewers (scripts) and
-          // basic article navigation (popups → new tab on link click).
-          sandbox={
-            isPdf
-              ? "allow-scripts allow-same-origin"
-              : "allow-scripts allow-popups allow-forms"
-          }
+          // PDFs are streamed through our own /api proxy, so the iframe is
+          // same-origin and we own the bytes — sandboxing adds no security
+          // here AND actively breaks rendering: Chrome's built-in PDF
+          // viewer needs to navigate the frame to a `chrome-extension://…`
+          // document, and a sandbox attribute blocks that handoff with
+          // "This page has been blocked by Chrome". For arbitrary saved
+          // links we still sandbox because the content is untrusted.
+          {...(isPdf
+            ? {}
+            : { sandbox: "allow-scripts allow-popups allow-forms" })}
           referrerPolicy="no-referrer"
           loading="lazy"
           className="block h-[78vh] w-full"
