@@ -148,7 +148,7 @@ function HeroSection() {
             <br className="hidden sm:block" />
             <span className="italic text-primary">
               {" "}
-              built for
+              built around
               <br className="hidden sm:block" />
               <CyclingTagline
                 taglines={HERO_TAGLINES}
