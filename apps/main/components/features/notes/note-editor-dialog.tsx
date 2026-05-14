@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { TagIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,13 +18,16 @@ import { Label } from "@quazom-ai/ui/components/ui/label";
 import { Textarea } from "@quazom-ai/ui/components/ui/textarea";
 import { useTRPC } from "@/trpc/client";
 import { NOTE_MAX_LENGTH } from "@/inngest/schemas";
+import { NoteTagsInput } from "./note-tags-input";
 
 export type NoteForEdit = {
   id: string;
   title: string | null;
   content: string;
+  tags?: string[];
   lessonId?: string | null;
   curriculumId?: string | null;
+  resourceId?: string | null;
 };
 
 type Props = {
@@ -33,6 +37,7 @@ type Props = {
   note?: NoteForEdit | null;
   defaultLessonId?: string | null;
   defaultCurriculumId?: string | null;
+  defaultResourceId?: string | null;
   // Optional callback after a successful save/delete so parents can react.
   onSaved?: (id: string) => void;
   onDeleted?: (id: string) => void;
@@ -58,6 +63,7 @@ function NoteForm({
   note,
   defaultLessonId,
   defaultCurriculumId,
+  defaultResourceId,
   onSaved,
   onDeleted,
 }: Props) {
@@ -65,6 +71,8 @@ function NoteForm({
   const queryClient = useQueryClient();
   const [title, setTitle] = useState(note?.title ?? "");
   const [content, setContent] = useState(note?.content ?? "");
+  const [tags, setTags] = useState<string[]>(note?.tags ?? []);
+  const [showTags, setShowTags] = useState((note?.tags ?? []).length > 0);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: trpc.listNotes.pathKey() });
@@ -115,13 +123,20 @@ function NoteForm({
     e.preventDefault();
     if (empty || overLimit) return;
     if (isEditing && note) {
-      update.mutate({ id: note.id, title: title.trim() || null, content });
+      update.mutate({
+        id: note.id,
+        title: title.trim() || null,
+        content,
+        tags,
+      });
     } else {
       create.mutate({
         title: title.trim() || undefined,
         content,
+        tags,
         lessonId: defaultLessonId ?? undefined,
         curriculumId: defaultCurriculumId ?? undefined,
+        resourceId: defaultResourceId ?? undefined,
       });
     }
   };
@@ -168,6 +183,25 @@ function NoteForm({
               <span className="text-destructive">Note is too long.</span>
             ) : null}
           </div>
+        </div>
+        <div className="flex flex-col gap-2">
+          {showTags || tags.length > 0 ? (
+            <>
+              <Label>Tags</Label>
+              <NoteTagsInput value={tags} onChange={setTags} />
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-fit cursor-pointer text-muted-foreground"
+              onClick={() => setShowTags(true)}
+            >
+              <TagIcon className="size-3.5" />
+              Add tags
+            </Button>
+          )}
         </div>
         <DialogFooter className="flex flex-row items-center justify-between gap-2 sm:justify-between">
           {isEditing && note ? (

@@ -10,9 +10,11 @@ import {
   ArrowRightIcon,
   BookIcon,
   GraduationCapIcon,
+  LibraryIcon,
   PencilIcon,
   SaveIcon,
   SparklesIcon,
+  TagIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
@@ -29,6 +31,7 @@ import {
 import type { NoteDetail } from "@/lib/queries/notes";
 import { Markdown } from "@/components/shared/markdown";
 import { MarkdownEditor } from "./markdown-editor";
+import { NoteTagsInput } from "./note-tags-input";
 
 type Props = {
   initialNote: NoteDetail;
@@ -48,6 +51,10 @@ export function NoteView({ initialNote }: Props) {
     initialNote.description ?? "",
   );
   const [draftContent, setDraftContent] = useState(initialNote.content);
+  const [draftTags, setDraftTags] = useState<string[]>(initialNote.tags ?? []);
+  const [showTagsEditor, setShowTagsEditor] = useState(
+    (initialNote.tags ?? []).length > 0,
+  );
 
   const heroRef = useRef<HTMLElement>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -77,6 +84,7 @@ export function NoteView({ initialNote }: Props) {
           title: draftTitle.trim() || null,
           description: draftDescription.trim() || null,
           content: draftContent,
+          tags: draftTags,
           updatedAt: new Date(),
         }));
         setEditing(false);
@@ -137,6 +145,8 @@ export function NoteView({ initialNote }: Props) {
     setDraftTitle(note.title ?? "");
     setDraftDescription(note.description ?? "");
     setDraftContent(note.content);
+    setDraftTags(note.tags ?? []);
+    setShowTagsEditor((note.tags ?? []).length > 0);
     setEditing(true);
   };
 
@@ -145,6 +155,7 @@ export function NoteView({ initialNote }: Props) {
     setDraftTitle(note.title ?? "");
     setDraftDescription(note.description ?? "");
     setDraftContent(note.content);
+    setDraftTags(note.tags ?? []);
   };
 
   const trimmedContent = draftContent.trim();
@@ -159,6 +170,7 @@ export function NoteView({ initialNote }: Props) {
       title: draftTitle.trim() || null,
       description: draftDescription.trim() || null,
       content: draftContent,
+      tags: draftTags,
     });
   };
 
@@ -258,6 +270,28 @@ export function NoteView({ initialNote }: Props) {
                 <span className="truncate">{note.lesson.title}</span>
               </Link>
             ) : null}
+            {note.resource ? (
+              <Link
+                href={`/resources/${note.resource.id}`}
+                className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs hover:bg-muted"
+              >
+                <LibraryIcon className="size-3" />
+                <span className="truncate">{note.resource.title}</span>
+              </Link>
+            ) : null}
+            {!editing && note.tags && note.tags.length > 0 ? (
+              <span className="flex flex-wrap items-center gap-1">
+                {note.tags.map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant="outline"
+                    className="text-[10px] font-normal lowercase"
+                  >
+                    #{tag}
+                  </Badge>
+                ))}
+              </span>
+            ) : null}
           </div>
 
           {editing ? (
@@ -284,6 +318,25 @@ export function NoteView({ initialNote }: Props) {
                   maxLength={NOTE_DESCRIPTION_MAX_LENGTH}
                   placeholder="A 1-2 sentence summary…"
                 />
+              </div>
+              <div className="flex flex-col gap-2">
+                {showTagsEditor || draftTags.length > 0 ? (
+                  <>
+                    <Label>Tags</Label>
+                    <NoteTagsInput value={draftTags} onChange={setDraftTags} />
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-fit cursor-pointer text-muted-foreground"
+                    onClick={() => setShowTagsEditor(true)}
+                  >
+                    <TagIcon className="size-3.5" />
+                    Add tags
+                  </Button>
+                )}
               </div>
             </div>
           ) : (

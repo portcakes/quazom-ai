@@ -16,12 +16,16 @@ type Props = {
   curriculumId?: string;
   /** Filter notes to those attached to a specific lesson. */
   lessonId?: string;
+  /** Filter notes to those attached to a specific resource. */
+  resourceId?: string;
   /** Restrict to free-form notes when no other filter is set. */
-  scope?: "all" | "user";
+  scope?: "all" | "user" | "resource";
   /** When set, the New Note button creates a note pre-attached to this curriculum. */
   newNoteCurriculumId?: string;
   /** When set, the New Note button creates a note pre-attached to this lesson. */
   newNoteLessonId?: string;
+  /** When set, the New Note button creates a note pre-attached to this resource. */
+  newNoteResourceId?: string;
   /** Override the empty-state copy. */
   emptyTitle?: string;
   emptyDescription?: string;
@@ -42,9 +46,11 @@ type Props = {
 export function NotesGrid({
   curriculumId,
   lessonId,
+  resourceId,
   scope,
   newNoteCurriculumId,
   newNoteLessonId,
+  newNoteResourceId,
   emptyTitle = "No notes yet",
   emptyDescription = "Capture a thought to get started.",
   hideSearch,
@@ -60,9 +66,10 @@ export function NotesGrid({
     () => ({
       ...(curriculumId ? { curriculumId } : {}),
       ...(lessonId ? { lessonId } : {}),
+      ...(resourceId ? { resourceId } : {}),
       ...(scope ? { scope } : {}),
     }),
-    [curriculumId, lessonId, scope],
+    [curriculumId, lessonId, resourceId, scope],
   );
 
   const notesQuery = useQuery(trpc.listNotes.queryOptions(filterInput));
@@ -151,6 +158,7 @@ export function NotesGrid({
           onOpenChange={setEditorOpen}
           curriculumId={newNoteCurriculumId ?? null}
           lessonId={newNoteLessonId ?? null}
+          resourceId={newNoteResourceId ?? null}
         />
       ) : (
         <NoteEditorDialog
@@ -158,6 +166,7 @@ export function NotesGrid({
           onOpenChange={setEditorOpen}
           defaultCurriculumId={newNoteCurriculumId ?? null}
           defaultLessonId={newNoteLessonId ?? null}
+          defaultResourceId={newNoteResourceId ?? null}
         />
       )}
     </section>

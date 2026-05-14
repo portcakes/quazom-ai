@@ -15,11 +15,29 @@ import {
   ANNOTATION_TEXT_MAX_LENGTH,
   NOTE_DESCRIPTION_MAX_LENGTH,
   NOTE_MAX_LENGTH,
+  NOTE_MAX_TAGS,
+  NOTE_TAG_MAX_LENGTH,
+  RESOURCE_DESCRIPTION_MAX_LENGTH,
+  RESOURCE_FILE_MAX_BYTES,
+  RESOURCE_TITLE_MAX_LENGTH,
+  RESOURCE_URL_MAX_LENGTH,
+  annotationColors,
   curriculumLevels,
   nextCurriculumLevel,
+  resourceFileTypes,
+  resourceMimeTypes,
   type CurriculumLevel,
   type QuizQuestion,
 } from '@/inngest/schemas';
+import {
+  deleteObject as r2DeleteObject,
+  getObjectText,
+  getSignedDownloadUrl,
+  getSignedUploadUrl,
+  headObject,
+  r2IsConfigured,
+} from '@/lib/r2';
+import { extractArticle, safeHostname } from '@/lib/readability';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { recordAiUsage } from '@/inngest/ai-usage';
@@ -51,7 +69,62 @@ const noteInputBase = z.object({
   title: z.string().max(120).optional(),
   description: z.string().max(NOTE_DESCRIPTION_MAX_LENGTH).optional(),
   content: z.string().min(1, 'Content is required').max(NOTE_MAX_LENGTH),
+  tags: z
+    .array(z.string().min(1).max(NOTE_TAG_MAX_LENGTH))
+    .max(NOTE_MAX_TAGS)
+    .optional(),
 });
+
+// Normalises a tag array to lower-cased, trimmed, deduplicated values so the
+// DB never accumulates "AI", "ai", "Ai" as three different rows. Returning
+// `null` when there are no usable tags lets the caller skip writing to the
+// column (and keep its default of `[]`).
+function normalizeTags(input: string[] | undefined | null): string[] | null {
+  if (!input || input.length === 0) return null;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of input) {
+    const tag = raw.trim().toLowerCase();
+    if (!tag) continue;
+    if (tag.length > NOTE_TAG_MAX_LENGTH) continue;
+    if (seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
+    if (out.length >= NOTE_MAX_TAGS) break;
+  }
+  return out.length > 0 ? out : null;
+}
+
+// Shared zod refinement for an HTTP(S) URL the user pastes into "Add link".
+// We don't try to detect dead links here — that would block submit on slow
+// sites. Instead we just check the protocol and host parsing so obvious
+// nonsense (javascript: URLs, blank strings, "foo.bar" without a scheme)
+// can't make it into the DB.
+const urlInputSchema = z
+  .string()
+  .min(1, 'URL is required')
+  .max(RESOURCE_URL_MAX_LENGTH, 'URL is too long')
+  .refine(
+    (value) => {
+      try {
+        const parsed = new URL(value);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Enter a valid http(s) URL' },
+  );
+
+// Reused by every resource procedure that accepts optional scope hints. A
+// single resource can be linked to a curriculum and a lesson at the same
+// time; linking to a lesson auto-pins to the lesson's curriculum as well.
+const resourceScopeSchema = z
+  .object({
+    curriculumId: z.string().optional(),
+    lessonId: z.string().optional(),
+  })
+  .optional();
 
 // Lazy-initialised Google client. The SDK reads GOOGLE_GENERATIVE_AI_API_KEY
 // from env on first use; we allocate at module load time so the client is
@@ -742,10 +815,11 @@ export const appRouter = createTRPCRouter({
       noteInputBase.extend({
         lessonId: z.string().optional(),
         curriculumId: z.string().optional(),
+        resourceId: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // If pinning to a lesson/curriculum, verify ownership first.
+      // If pinning to a lesson/curriculum/resource, verify ownership first.
       if (input.lessonId) {
         const owns = await prisma.lesson.findFirst({
           where: {
@@ -765,7 +839,15 @@ export const appRouter = createTRPCRouter({
         });
         if (!owns) throw new TRPCError({ code: 'NOT_FOUND', message: 'Curriculum not found' });
       }
+      if (input.resourceId) {
+        const owns = await prisma.resource.findFirst({
+          where: { id: input.resourceId, userId: ctx.userId },
+          select: { id: true },
+        });
+        if (!owns) throw new TRPCError({ code: 'NOT_FOUND', message: 'Resource not found' });
+      }
 
+      const tags = normalizeTags(input.tags);
       const note = await prisma.note.create({
         data: {
           id: crypto.randomUUID(),
@@ -773,8 +855,10 @@ export const appRouter = createTRPCRouter({
           title: input.title?.trim() || null,
           description: input.description?.trim() || null,
           content: input.content,
+          tags: tags ?? [],
           lessonId: input.lessonId ?? null,
           curriculumId: input.curriculumId ?? null,
+          resourceId: input.resourceId ?? null,
         },
       });
       return note;
@@ -790,9 +874,18 @@ export const appRouter = createTRPCRouter({
           .nullable()
           .optional(),
         content: z.string().min(1).max(NOTE_MAX_LENGTH).optional(),
+        tags: z
+          .array(z.string().min(1).max(NOTE_TAG_MAX_LENGTH))
+          .max(NOTE_MAX_TAGS)
+          .nullable()
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const tags =
+        input.tags === undefined
+          ? undefined
+          : (normalizeTags(input.tags) ?? []);
       const result = await prisma.note.updateMany({
         where: { id: input.id, userId: ctx.userId },
         data: {
@@ -801,6 +894,7 @@ export const appRouter = createTRPCRouter({
             ? { description: input.description?.trim() || null }
             : {}),
           ...(input.content !== undefined ? { content: input.content } : {}),
+          ...(tags !== undefined ? { tags } : {}),
         },
       });
       if (result.count === 0) {
@@ -826,6 +920,7 @@ export const appRouter = createTRPCRouter({
             },
           },
           curriculum: { select: { id: true, title: true } },
+          resource: { select: { id: true, title: true, kind: true } },
         },
       });
       if (!note) {
@@ -848,9 +943,11 @@ export const appRouter = createTRPCRouter({
         title: note.title,
         description: note.description,
         content: note.content,
+        tags: note.tags,
         isAnnotation: note.isAnnotation,
         lessonId: note.lessonId,
         curriculumId: note.curriculumId,
+        resourceId: note.resourceId,
         createdAt: note.createdAt,
         updatedAt: note.updatedAt,
         lesson: note.lesson
@@ -862,6 +959,13 @@ export const appRouter = createTRPCRouter({
           : null,
         curriculum: note.curriculum
           ? { id: note.curriculum.id, title: note.curriculum.title }
+          : null,
+        resource: note.resource
+          ? {
+              id: note.resource.id,
+              title: note.resource.title,
+              kind: note.resource.kind,
+            }
           : null,
         prevId,
         nextId,
@@ -922,20 +1026,44 @@ export const appRouter = createTRPCRouter({
   // Annotations (highlight + commentary on a lesson passage)
   // ---------------------------------------------------------------------
   listAnnotations: protectedcProcedure
-    .input(z.object({ lessonId: z.string() }))
+    .input(
+      z.object({
+        lessonId: z.string().optional(),
+        resourceId: z.string().optional(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
-      const owns = await prisma.lesson.findFirst({
-        where: { id: input.lessonId, module: { curriculum: { userId: ctx.userId } } },
-        select: { id: true },
-      });
-      if (!owns) return [];
+      if (!input.lessonId && !input.resourceId) return [];
+      // Verify the user owns the target. We bail with an empty list rather
+      // than throwing so cross-user requests don't leak existence.
+      if (input.lessonId) {
+        const owns = await prisma.lesson.findFirst({
+          where: {
+            id: input.lessonId,
+            module: { curriculum: { userId: ctx.userId } },
+          },
+          select: { id: true },
+        });
+        if (!owns) return [];
+      } else if (input.resourceId) {
+        const owns = await prisma.resource.findFirst({
+          where: { id: input.resourceId, userId: ctx.userId },
+          select: { id: true },
+        });
+        if (!owns) return [];
+      }
       const rows = await prisma.annotation.findMany({
-        where: { userId: ctx.userId, lessonId: input.lessonId },
+        where: {
+          userId: ctx.userId,
+          ...(input.lessonId ? { lessonId: input.lessonId } : {}),
+          ...(input.resourceId ? { resourceId: input.resourceId } : {}),
+        },
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,
           quote: true,
           annotation: true,
+          color: true,
           noteId: true,
           createdAt: true,
         },
@@ -945,32 +1073,79 @@ export const appRouter = createTRPCRouter({
   createAnnotation: activeUserProcedure
     .input(
       z.object({
-        lessonId: z.string(),
+        // Exactly one of these must be set — the client picks based on
+        // whether the user is annotating a lesson or a resource.
+        lessonId: z.string().optional(),
+        resourceId: z.string().optional(),
         quote: z.string().min(1).max(ANNOTATION_QUOTE_MAX_LENGTH),
-        annotation: z.string().min(1).max(ANNOTATION_TEXT_MAX_LENGTH),
+        // Annotation text is now optional. Empty / null means a colour-only
+        // highlight (no popover surfaces over the passage).
+        annotation: z
+          .string()
+          .max(ANNOTATION_TEXT_MAX_LENGTH)
+          .nullable()
+          .optional(),
+        color: z.enum(annotationColors).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const lesson = await prisma.lesson.findFirst({
-        where: { id: input.lessonId, module: { curriculum: { userId: ctx.userId } } },
-        select: {
-          id: true,
-          title: true,
-          module: { select: { curriculumId: true } },
-        },
-      });
-      if (!lesson) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Lesson not found' });
+      const hasLesson = !!input.lessonId;
+      const hasResource = !!input.resourceId;
+      if (hasLesson === hasResource) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Provide exactly one of lessonId or resourceId',
+        });
+      }
+
+      let lessonId: string | null = null;
+      let resourceId: string | null = null;
+      let curriculumId: string | null = null;
+      let surfaceTitle: string;
+      let surfaceKindLabel: string;
+
+      if (hasLesson) {
+        const lesson = await prisma.lesson.findFirst({
+          where: {
+            id: input.lessonId!,
+            module: { curriculum: { userId: ctx.userId } },
+          },
+          select: {
+            id: true,
+            title: true,
+            module: { select: { curriculumId: true } },
+          },
+        });
+        if (!lesson) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Lesson not found' });
+        }
+        lessonId = lesson.id;
+        curriculumId = lesson.module.curriculumId;
+        surfaceTitle = lesson.title;
+        surfaceKindLabel = 'lesson';
+      } else {
+        const resource = await prisma.resource.findFirst({
+          where: { id: input.resourceId!, userId: ctx.userId },
+          select: { id: true, title: true },
+        });
+        if (!resource) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Resource not found' });
+        }
+        resourceId = resource.id;
+        surfaceTitle = resource.title;
+        surfaceKindLabel = 'resource';
       }
 
       // Find or create the user's auto-managed annotation note for this
-      // lesson. Re-using one row keeps the user's notes page tidy and lets
-      // hover-card lookups join annotations → note in a single query.
+      // surface (one per (user, lesson) or (user, resource)). Re-using one
+      // row keeps the user's notes page tidy and lets hover-card lookups
+      // join annotations → note in a single query.
       const existing = await prisma.note.findFirst({
         where: {
           userId: ctx.userId,
-          lessonId: lesson.id,
           isAnnotation: true,
+          ...(lessonId ? { lessonId } : { lessonId: null }),
+          ...(resourceId ? { resourceId } : { resourceId: null }),
         },
         select: { id: true },
       });
@@ -980,11 +1155,12 @@ export const appRouter = createTRPCRouter({
           data: {
             id: crypto.randomUUID(),
             userId: ctx.userId,
-            lessonId: lesson.id,
-            curriculumId: lesson.module.curriculumId,
+            lessonId,
+            curriculumId,
+            resourceId,
             isAnnotation: true,
-            title: `Annotations · ${lesson.title}`,
-            description: `Highlights and commentary you saved while working through "${lesson.title}".`,
+            title: `Annotations · ${surfaceTitle}`,
+            description: `Highlights and commentary you saved while working through this ${surfaceKindLabel}.`,
             content: '',
           },
           select: { id: true },
@@ -992,14 +1168,17 @@ export const appRouter = createTRPCRouter({
         noteId = created.id;
       }
 
+      const trimmedAnnotation = input.annotation?.trim() ?? '';
       const annotation = await prisma.annotation.create({
         data: {
           id: crypto.randomUUID(),
           userId: ctx.userId,
-          lessonId: lesson.id,
+          lessonId,
+          resourceId,
           noteId,
           quote: input.quote,
-          annotation: input.annotation,
+          annotation: trimmedAnnotation.length > 0 ? trimmedAnnotation : null,
+          color: input.color ?? 'YELLOW',
         },
       });
 
@@ -1010,10 +1189,24 @@ export const appRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string(),
-        annotation: z.string().min(1).max(ANNOTATION_TEXT_MAX_LENGTH),
+        // Optional updates — at least one must be provided. Pass `null` for
+        // annotation to clear it (turns a popover annotation back into a
+        // colour-only highlight).
+        annotation: z
+          .string()
+          .max(ANNOTATION_TEXT_MAX_LENGTH)
+          .nullable()
+          .optional(),
+        color: z.enum(annotationColors).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      if (input.annotation === undefined && input.color === undefined) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Nothing to update',
+        });
+      }
       const existing = await prisma.annotation.findFirst({
         where: { id: input.id, userId: ctx.userId },
         select: { id: true, noteId: true },
@@ -1021,9 +1214,15 @@ export const appRouter = createTRPCRouter({
       if (!existing) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Annotation not found' });
       }
+      const trimmed = input.annotation?.trim();
       await prisma.annotation.update({
         where: { id: existing.id },
-        data: { annotation: input.annotation },
+        data: {
+          ...(input.annotation !== undefined
+            ? { annotation: trimmed && trimmed.length > 0 ? trimmed : null }
+            : {}),
+          ...(input.color !== undefined ? { color: input.color } : {}),
+        },
       });
       await rebuildAnnotationNoteContent(existing.noteId);
       return { ok: true };
@@ -1065,7 +1264,11 @@ export const appRouter = createTRPCRouter({
         .object({
           curriculumId: z.string().optional(),
           lessonId: z.string().optional(),
-          scope: z.enum(['all', 'user', 'curriculum', 'lesson']).optional(),
+          resourceId: z.string().optional(),
+          scope: z
+            .enum(['all', 'user', 'curriculum', 'lesson', 'resource'])
+            .optional(),
+          tag: z.string().max(NOTE_TAG_MAX_LENGTH).optional(),
         })
         .optional(),
     )
@@ -1076,6 +1279,8 @@ export const appRouter = createTRPCRouter({
       const where: NoteWhere = { userId: ctx.userId };
       if (input?.lessonId) {
         where.lessonId = input.lessonId;
+      } else if (input?.resourceId) {
+        where.resourceId = input.resourceId;
       } else if (input?.curriculumId) {
         where.OR = [
           { curriculumId: input.curriculumId },
@@ -1084,6 +1289,14 @@ export const appRouter = createTRPCRouter({
       } else if (input?.scope === 'user') {
         where.lessonId = null;
         where.curriculumId = null;
+        where.resourceId = null;
+      } else if (input?.scope === 'resource') {
+        where.resourceId = { not: null };
+      }
+      if (input?.tag) {
+        // Postgres array contains operator. We normalise the tag the same
+        // way write paths do so a query for "AI" matches "ai".
+        where.tags = { has: input.tag.trim().toLowerCase() };
       }
 
       const rows = await prisma.note.findMany({
@@ -1099,6 +1312,7 @@ export const appRouter = createTRPCRouter({
             },
           },
           curriculum: { select: { id: true, title: true } },
+          resource: { select: { id: true, title: true, kind: true } },
         },
       });
       return rows.map((row) => ({
@@ -1106,9 +1320,11 @@ export const appRouter = createTRPCRouter({
         title: row.title,
         description: row.description,
         content: row.content,
+        tags: row.tags,
         isAnnotation: row.isAnnotation,
         lessonId: row.lessonId,
         curriculumId: row.curriculumId,
+        resourceId: row.resourceId,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         lesson: row.lesson
@@ -1121,7 +1337,512 @@ export const appRouter = createTRPCRouter({
         curriculum: row.curriculum
           ? { id: row.curriculum.id, title: row.curriculum.title }
           : null,
+        resource: row.resource
+          ? {
+              id: row.resource.id,
+              title: row.resource.title,
+              kind: row.resource.kind,
+            }
+          : null,
       }));
+    }),
+
+  // ---------------------------------------------------------------------
+  // Resources (learner-uploaded files + saved links)
+  // ---------------------------------------------------------------------
+  //
+  // The Resource model is user-owned but can be attached to many curricula
+  // and many lessons via explicit join tables. Linking a resource to a
+  // lesson auto-links it to the lesson's curriculum as well so the
+  // curriculum's Resources tab shows everything attached at either layer.
+
+  listResources: protectedcProcedure
+    .input(
+      z
+        .object({
+          curriculumId: z.string().optional(),
+          lessonId: z.string().optional(),
+          // "filter" combines kind (LINK vs FILE) with file-type granularity.
+          // The /resources page surfaces these as the visual filter chips.
+          filter: z.enum(['LINK', 'PDF', 'TXT', 'MD']).optional(),
+          search: z.string().max(120).optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      type Where = NonNullable<
+        NonNullable<Parameters<typeof prisma.resource.findMany>[0]>['where']
+      >;
+      const where: Where = { userId: ctx.userId };
+      if (input?.filter === 'LINK') where.kind = 'LINK';
+      else if (input?.filter === 'PDF') where.fileType = 'PDF';
+      else if (input?.filter === 'TXT') where.fileType = 'TXT';
+      else if (input?.filter === 'MD') where.fileType = 'MD';
+      if (input?.curriculumId) {
+        where.curriculumLinks = { some: { curriculumId: input.curriculumId } };
+      } else if (input?.lessonId) {
+        where.lessonLinks = { some: { lessonId: input.lessonId } };
+      }
+      if (input?.search?.trim()) {
+        const q = input.search.trim();
+        where.OR = [
+          { title: { contains: q, mode: 'insensitive' } },
+          { description: { contains: q, mode: 'insensitive' } },
+          { domain: { contains: q, mode: 'insensitive' } },
+        ];
+      }
+      const rows = await prisma.resource.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          kind: true,
+          title: true,
+          description: true,
+          url: true,
+          domain: true,
+          fileKey: true,
+          fileType: true,
+          fileSize: true,
+          fileMimeType: true,
+          fileName: true,
+          status: true,
+          statusMessage: true,
+          extractedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          curriculumLinks: { select: { curriculumId: true } },
+          lessonLinks: { select: { lessonId: true } },
+        },
+      });
+      return rows.map((row) => ({
+        ...row,
+        curriculumIds: row.curriculumLinks.map((l) => l.curriculumId),
+        lessonIds: row.lessonLinks.map((l) => l.lessonId),
+      }));
+    }),
+
+  getResource: protectedcProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const row = await prisma.resource.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        include: {
+          curriculumLinks: {
+            include: { curriculum: { select: { id: true, title: true } } },
+            orderBy: { createdAt: 'asc' },
+          },
+          lessonLinks: {
+            include: {
+              lesson: {
+                select: {
+                  id: true,
+                  title: true,
+                  module: { select: { curriculumId: true } },
+                },
+              },
+            },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
+      if (!row) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Resource not found' });
+      }
+      // Mint a short-lived signed GET URL for FILE resources so the viewer
+      // can render the iframe / `<embed>` without exposing the bucket key.
+      let signedFileUrl: string | null = null;
+      if (row.kind === 'FILE' && row.fileKey && r2IsConfigured()) {
+        try {
+          signedFileUrl = await getSignedDownloadUrl({
+            key: row.fileKey,
+            filename: row.fileName ?? `${row.title}`,
+            expiresInSeconds: 600,
+          });
+        } catch (err) {
+          console.warn('Failed to mint R2 signed URL', { id: row.id, err });
+        }
+      }
+      return {
+        id: row.id,
+        kind: row.kind,
+        title: row.title,
+        description: row.description,
+        url: row.url,
+        domain: row.domain,
+        fileKey: row.fileKey,
+        fileType: row.fileType,
+        fileSize: row.fileSize,
+        fileMimeType: row.fileMimeType,
+        fileName: row.fileName,
+        status: row.status,
+        statusMessage: row.statusMessage,
+        content: row.content,
+        extractedAt: row.extractedAt,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        signedFileUrl,
+        curricula: row.curriculumLinks.map((l) => ({
+          id: l.curriculum.id,
+          title: l.curriculum.title,
+        })),
+        lessons: row.lessonLinks.map((l) => ({
+          id: l.lesson.id,
+          title: l.lesson.title,
+          curriculumId: l.lesson.module.curriculumId,
+        })),
+      };
+    }),
+
+  // Lightweight polling endpoint used by the resources list to refresh the
+  // status of an in-flight upload / extraction without re-pulling the full
+  // resource detail.
+  getResourceStatus: protectedcProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const row = await prisma.resource.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: {
+          id: true,
+          status: true,
+          statusMessage: true,
+          extractedAt: true,
+          updatedAt: true,
+        },
+      });
+      if (!row) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Resource not found' });
+      }
+      return row;
+    }),
+
+  createResourceLink: activeUserProcedure
+    .input(
+      z.object({
+        url: urlInputSchema,
+        title: z
+          .string()
+          .max(RESOURCE_TITLE_MAX_LENGTH)
+          .optional(),
+        description: z
+          .string()
+          .max(RESOURCE_DESCRIPTION_MAX_LENGTH)
+          .optional(),
+        scope: resourceScopeSchema,
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const scope = await resolveResourceScope(ctx.userId, input.scope);
+      const domain = safeHostname(input.url);
+      const fallbackTitle = input.title?.trim() || domain || input.url;
+      const id = crypto.randomUUID();
+      const resource = await prisma.resource.create({
+        data: {
+          id,
+          userId: ctx.userId,
+          kind: 'LINK',
+          title: fallbackTitle.slice(0, RESOURCE_TITLE_MAX_LENGTH),
+          description: input.description?.trim() || null,
+          url: input.url,
+          domain,
+          // Links are immediately READY because we don't gate on extraction;
+          // the viewer triggers extraction lazily on first open.
+          status: 'READY',
+        },
+      });
+      await applyResourceScope(resource.id, scope);
+      return { id: resource.id };
+    }),
+
+  createResourceFile: activeUserProcedure
+    .input(
+      z.object({
+        title: z.string().max(RESOURCE_TITLE_MAX_LENGTH).optional(),
+        description: z
+          .string()
+          .max(RESOURCE_DESCRIPTION_MAX_LENGTH)
+          .optional(),
+        fileName: z.string().min(1).max(200),
+        fileType: z.enum(resourceFileTypes),
+        fileSize: z
+          .number()
+          .int()
+          .positive()
+          .max(RESOURCE_FILE_MAX_BYTES, 'File is too large'),
+        fileMimeType: z.string().min(1).max(120),
+        scope: resourceScopeSchema,
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!r2IsConfigured()) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message:
+            'R2 storage is not configured on the server. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET to enable uploads.',
+        });
+      }
+      const acceptedMime = resourceMimeTypes[input.fileType];
+      if (!acceptedMime.includes(input.fileMimeType)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `MIME type "${input.fileMimeType}" is not accepted for ${input.fileType} uploads.`,
+        });
+      }
+      const scope = await resolveResourceScope(ctx.userId, input.scope);
+      const id = crypto.randomUUID();
+      const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const extByType: Record<typeof input.fileType, string> = {
+        TXT: 'txt',
+        PDF: 'pdf',
+        MD: 'md',
+      };
+      const ext = extByType[input.fileType];
+      const fileKey = `users/${ctx.userId}/resources/${id}.${ext}`;
+
+      const resource = await prisma.resource.create({
+        data: {
+          id,
+          userId: ctx.userId,
+          kind: 'FILE',
+          title:
+            input.title?.trim() ||
+            input.fileName
+              .replace(/\.[^.]+$/, '')
+              .slice(0, RESOURCE_TITLE_MAX_LENGTH),
+          description: input.description?.trim() || null,
+          fileKey,
+          fileType: input.fileType,
+          fileSize: input.fileSize,
+          fileMimeType: input.fileMimeType,
+          fileName: safeName.slice(0, 200),
+          status: 'PENDING',
+        },
+      });
+      await applyResourceScope(resource.id, scope);
+
+      const uploadUrl = await getSignedUploadUrl({
+        key: fileKey,
+        contentType: input.fileMimeType,
+        contentLength: input.fileSize,
+        expiresInSeconds: 300,
+      });
+      // R2 signs Content-Type into the canonical request, so the browser
+      // MUST PUT with exactly the same value or the signature won't match
+      // and R2 returns 403. We pass it back so the client can't drift.
+      return {
+        id: resource.id,
+        uploadUrl,
+        uploadHeaders: {
+          'Content-Type': input.fileMimeType,
+        } as Record<string, string>,
+      };
+    }),
+
+  confirmResourceUpload: activeUserProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const resource = await prisma.resource.findFirst({
+        where: { id: input.id, userId: ctx.userId, kind: 'FILE' },
+        select: { id: true, fileKey: true, fileType: true, fileSize: true },
+      });
+      if (!resource || !resource.fileKey) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Resource not found' });
+      }
+      const head = await headObject(resource.fileKey);
+      if (!head.exists) {
+        await prisma.resource.update({
+          where: { id: resource.id },
+          data: {
+            status: 'FAILED',
+            statusMessage: 'Upload did not arrive at R2 before confirmation.',
+          },
+        });
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Upload did not arrive at R2 — please try again.',
+        });
+      }
+      // For TXT/MD we eagerly fetch the body and cache it as markdown so
+      // the viewer can render + annotate without a per-view R2 round trip.
+      let content: string | null = null;
+      if (resource.fileType === 'TXT' || resource.fileType === 'MD') {
+        try {
+          const body = await getObjectText(resource.fileKey);
+          content = body.slice(0, 200_000);
+        } catch (err) {
+          console.warn('Failed to read uploaded text body from R2', err);
+        }
+      }
+      await prisma.resource.update({
+        where: { id: resource.id },
+        data: {
+          status: 'READY',
+          statusMessage: null,
+          content,
+        },
+      });
+      return { ok: true };
+    }),
+
+  // Reader-mode extraction for LINK resources. Caches the result so
+  // subsequent loads skip the (potentially slow) fetch+parse round trip.
+  // Mutation rather than query so the client can call it imperatively from
+  // a "Re-extract" button.
+  extractResourceLink: activeUserProcedure
+    .input(z.object({ id: z.string(), force: z.boolean().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const resource = await prisma.resource.findFirst({
+        where: { id: input.id, userId: ctx.userId, kind: 'LINK' },
+        select: { id: true, url: true, content: true, extractedAt: true },
+      });
+      if (!resource || !resource.url) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Resource not found' });
+      }
+      if (!input.force && resource.content && resource.extractedAt) {
+        return {
+          ok: true as const,
+          cached: true as const,
+          extractedAt: resource.extractedAt,
+        };
+      }
+      try {
+        const article = await extractArticle(resource.url);
+        await prisma.resource.update({
+          where: { id: resource.id },
+          data: {
+            // Use the extracted title only when the user didn't pick a
+            // custom one (otherwise we'd silently overwrite their label).
+            content: article.markdown.slice(0, 200_000),
+            extractedAt: new Date(),
+            // Surface byline/excerpt back into the description for cards
+            // when the user didn't write their own.
+            description: undefined,
+            status: 'READY',
+            statusMessage: null,
+          },
+        });
+        return {
+          ok: true as const,
+          cached: false as const,
+          extractedAt: new Date(),
+          title: article.title,
+          siteName: article.siteName,
+          wordCount: article.wordCount,
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Extraction failed';
+        await prisma.resource.update({
+          where: { id: resource.id },
+          data: {
+            statusMessage: message.slice(0, 500),
+          },
+        });
+        throw new TRPCError({ code: 'BAD_GATEWAY', message });
+      }
+    }),
+
+  updateResource: protectedcProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        title: z.string().min(1).max(RESOURCE_TITLE_MAX_LENGTH).optional(),
+        description: z
+          .string()
+          .max(RESOURCE_DESCRIPTION_MAX_LENGTH)
+          .nullable()
+          .optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await prisma.resource.updateMany({
+        where: { id: input.id, userId: ctx.userId },
+        data: {
+          ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+          ...(input.description !== undefined
+            ? { description: input.description?.trim() || null }
+            : {}),
+        },
+      });
+      if (result.count === 0) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Resource not found' });
+      }
+      return { ok: true };
+    }),
+
+  linkResource: activeUserProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        curriculumId: z.string().optional(),
+        lessonId: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const resource = await prisma.resource.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: { id: true },
+      });
+      if (!resource) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Resource not found' });
+      }
+      const scope = await resolveResourceScope(ctx.userId, {
+        curriculumId: input.curriculumId,
+        lessonId: input.lessonId,
+      });
+      await applyResourceScope(resource.id, scope);
+      return { ok: true };
+    }),
+
+  unlinkResource: activeUserProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        curriculumId: z.string().optional(),
+        lessonId: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const resource = await prisma.resource.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: { id: true },
+      });
+      if (!resource) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Resource not found' });
+      }
+      if (input.curriculumId) {
+        await prisma.resourceCurriculum.deleteMany({
+          where: { resourceId: resource.id, curriculumId: input.curriculumId },
+        });
+      }
+      if (input.lessonId) {
+        await prisma.resourceLesson.deleteMany({
+          where: { resourceId: resource.id, lessonId: input.lessonId },
+        });
+      }
+      return { ok: true };
+    }),
+
+  deleteResource: activeUserProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const resource = await prisma.resource.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: { id: true, kind: true, fileKey: true },
+      });
+      if (!resource) return { deleted: 0 };
+      // Best-effort R2 cleanup; ignore failures so a broken R2 doesn't
+      // leave the DB row stranded.
+      if (resource.kind === 'FILE' && resource.fileKey && r2IsConfigured()) {
+        try {
+          await r2DeleteObject(resource.fileKey);
+        } catch (err) {
+          console.warn('Failed to delete R2 object on resource delete', err);
+        }
+      }
+      const result = await prisma.resource.deleteMany({
+        where: { id: resource.id, userId: ctx.userId },
+      });
+      return { deleted: result.count };
     }),
 
   // ---------------------------------------------------------------------
@@ -1693,8 +2414,10 @@ async function buildPreview(userId: string, input: ScheduleInput) {
 }
 
 // Rebuilds the markdown body of an annotation note from its annotations,
-// in chronological order. Each annotation renders as `> quote\n\n— commentary`
-// separated by `---` so the note reads like a clean reading log.
+// in chronological order. Each annotation renders as `> quote` followed by
+// the user's commentary (when present). Colour-only highlights — annotations
+// with no commentary — still appear in the auto-note as a quote-only block
+// so the user has a reading log of every passage they marked up.
 async function rebuildAnnotationNoteContent(noteId: string): Promise<void> {
   const annotations = await prisma.annotation.findMany({
     where: { noteId },
@@ -1706,7 +2429,8 @@ async function rebuildAnnotationNoteContent(noteId: string): Promise<void> {
       .split('\n')
       .map((line) => `> ${line}`)
       .join('\n');
-    return `${quoted}\n\n${a.annotation}`;
+    const commentary = a.annotation?.trim();
+    return commentary ? `${quoted}\n\n${commentary}` : quoted;
   });
   const content = blocks.join('\n\n---\n\n');
   await prisma.note.update({
@@ -1720,4 +2444,75 @@ function dateToDayKey(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+// Resolve a resource scope hint (curriculumId / lessonId) to a verified pair
+// that the caller actually owns. Linking via a lesson auto-pins the lesson's
+// curriculum too so the curriculum-level Resources tab picks the resource
+// up without the user having to attach it twice.
+async function resolveResourceScope(
+  userId: string,
+  scope: { curriculumId?: string; lessonId?: string } | undefined,
+): Promise<{ curriculumIds: string[]; lessonIds: string[] }> {
+  if (!scope) return { curriculumIds: [], lessonIds: [] };
+  const curriculumIds = new Set<string>();
+  const lessonIds = new Set<string>();
+  if (scope.lessonId) {
+    const lesson = await prisma.lesson.findFirst({
+      where: {
+        id: scope.lessonId,
+        module: { curriculum: { userId } },
+      },
+      select: { id: true, module: { select: { curriculumId: true } } },
+    });
+    if (!lesson) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Lesson not found' });
+    }
+    lessonIds.add(lesson.id);
+    curriculumIds.add(lesson.module.curriculumId);
+  }
+  if (scope.curriculumId) {
+    const curriculum = await prisma.curriculum.findFirst({
+      where: { id: scope.curriculumId, userId },
+      select: { id: true },
+    });
+    if (!curriculum) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Curriculum not found' });
+    }
+    curriculumIds.add(curriculum.id);
+  }
+  return {
+    curriculumIds: Array.from(curriculumIds),
+    lessonIds: Array.from(lessonIds),
+  };
+}
+
+// Idempotent insert into the resource ↔ curriculum / ↔ lesson join tables.
+// We use createMany with skipDuplicates so re-pinning a resource from the
+// same surface (e.g. "Add resource" on a lesson the user already has it on)
+// is a no-op rather than an error.
+async function applyResourceScope(
+  resourceId: string,
+  scope: { curriculumIds: string[]; lessonIds: string[] },
+): Promise<void> {
+  if (scope.curriculumIds.length > 0) {
+    await prisma.resourceCurriculum.createMany({
+      data: scope.curriculumIds.map((curriculumId) => ({
+        id: crypto.randomUUID(),
+        resourceId,
+        curriculumId,
+      })),
+      skipDuplicates: true,
+    });
+  }
+  if (scope.lessonIds.length > 0) {
+    await prisma.resourceLesson.createMany({
+      data: scope.lessonIds.map((lessonId) => ({
+        id: crypto.randomUUID(),
+        resourceId,
+        lessonId,
+      })),
+      skipDuplicates: true,
+    });
+  }
 }

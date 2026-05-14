@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { cn } from "@quazom-ai/ui/lib/utils";
 import {
   HighlightToolbar,
@@ -8,33 +10,69 @@ import {
 } from "@/components/features/notes/highlight-toolbar";
 import { NoteBottomSheet } from "@/components/features/notes/note-bottom-sheet";
 import { AnnotateDialog } from "@/components/features/notes/annotate-dialog";
+import { useTRPC } from "@/trpc/client";
+import type { AnnotationColor } from "@/inngest/schemas";
 
-type Props = {
+type LessonTarget = {
+  kind: "lesson";
   lessonId: string;
   curriculumId: string;
+};
+
+type ResourceTarget = {
+  kind: "resource";
+  resourceId: string;
+};
+
+type Props = {
+  /** Polymorphic target — lesson or resource. Determines where new notes
+   *  and annotations are pinned. */
+  target?: LessonTarget | ResourceTarget;
+  /** Backwards-compatible shortcut for lesson targets. */
+  lessonId?: string;
+  curriculumId?: string;
   className?: string;
   children: React.ReactNode;
 };
 
 /**
- * Wraps a region of lesson content. Captures any text selection inside the
- * region and shows a small floating toolbar with two actions:
- *   1. "Insert as quote" — opens the lesson note bottom sheet pre-filled
- *      with the highlighted text as a markdown blockquote.
- *   2. "Annotate" — opens a dialog to attach commentary; the saved
- *      annotation appears in a hover card on the highlighted passage and
- *      gets rolled into the lesson's auto-managed annotations note.
+ * Wraps a region of content (a lesson view, a resource viewer body, etc.).
+ * Captures any text selection inside the region and shows a floating
+ * toolbar with three actions:
+ *
+ *   1. "Quote" — opens the bottom-sheet note composer pre-filled with the
+ *      highlighted text as a markdown blockquote.
+ *   2. Colour swatches — instantly save a colour-only highlight (no
+ *      commentary) in the picked colour. Optimistic UX: dismiss the
+ *      toolbar, save in the background, refresh annotations on success.
+ *   3. "Add note" — opens the annotate dialog so the user can pair the
+ *      highlight with commentary (and tweak the colour).
  *
  * The wrapper itself is a transparent <div> — it doesn't impose layout, so
- * existing lesson views can drop it around their root content with no
- * visual change.
+ * existing surfaces can drop it around their root content with no visual
+ * change.
  */
 export function Highlightable({
+  target: targetProp,
   lessonId,
   curriculumId,
   className,
   children,
 }: Props) {
+  const target: LessonTarget | ResourceTarget | null =
+    targetProp ??
+    (lessonId && curriculumId
+      ? { kind: "lesson", lessonId, curriculumId }
+      : null);
+  if (!target) {
+    throw new Error(
+      "Highlightable requires either `target` or both `lessonId` and `curriculumId`",
+    );
+  }
+
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+
   const ref = useRef<HTMLDivElement>(null);
   const { selection, clearSelection } = useTextSelection(ref);
 
@@ -58,12 +96,54 @@ export function Highlightable({
     window.getSelection()?.removeAllRanges();
   }, [selection, clearSelection]);
 
+  const createAnnotation = useMutation(
+    trpc.createAnnotation.mutationOptions({
+      onSuccess: () => {
+        void queryClient.invalidateQueries({
+          queryKey: trpc.listAnnotations.pathKey(),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.listNotes.pathKey(),
+        });
+      },
+      onError: (err) =>
+        toast.error(err.message ?? "Failed to save highlight"),
+    }),
+  );
+
+  const handleHighlight = useCallback(
+    (color: AnnotationColor) => {
+      if (!selection) return;
+      const quote = selection.text;
+      clearSelection();
+      window.getSelection()?.removeAllRanges();
+      createAnnotation.mutate({
+        ...(target.kind === "lesson"
+          ? { lessonId: target.lessonId }
+          : { resourceId: target.resourceId }),
+        quote,
+        annotation: null,
+        color,
+      });
+    },
+    [selection, target, clearSelection, createAnnotation],
+  );
+
   const initialContent = pendingQuote
     ? `${pendingQuote
         .split("\n")
         .map((line) => `> ${line}`)
         .join("\n")}\n\n`
     : "";
+
+  const lessonScope =
+    target.kind === "lesson"
+      ? {
+          lessonId: target.lessonId,
+          curriculumId: target.curriculumId,
+        }
+      : { lessonId: undefined, curriculumId: undefined };
+  const resourceId = target.kind === "resource" ? target.resourceId : undefined;
 
   return (
     <div ref={ref} className={cn("relative", className)}>
@@ -73,6 +153,7 @@ export function Highlightable({
         position={selection?.position ?? null}
         selectionText={selection?.text ?? ""}
         onQuote={handleQuote}
+        onHighlight={handleHighlight}
         onAnnotate={handleAnnotate}
         onDismiss={clearSelection}
       />
@@ -83,8 +164,9 @@ export function Highlightable({
           setBottomSheetOpen(o);
           if (!o) setPendingQuote(null);
         }}
-        lessonId={lessonId}
-        curriculumId={curriculumId}
+        lessonId={lessonScope.lessonId}
+        curriculumId={lessonScope.curriculumId}
+        resourceId={resourceId}
         initialContent={initialContent}
       />
 
@@ -95,7 +177,11 @@ export function Highlightable({
             setAnnotateOpen(o);
             if (!o) setPendingQuote(null);
           }}
-          lessonId={lessonId}
+          target={
+            target.kind === "lesson"
+              ? { kind: "lesson", lessonId: target.lessonId }
+              : { kind: "resource", resourceId: target.resourceId }
+          }
           quote={pendingQuote}
         />
       ) : null}

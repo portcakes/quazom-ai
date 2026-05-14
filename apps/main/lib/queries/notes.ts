@@ -12,6 +12,8 @@ export type NoteSummary = {
   isAnnotation: boolean;
   lessonId: string | null;
   curriculumId: string | null;
+  resourceId: string | null;
+  tags: string[];
   createdAt: Date;
   updatedAt: Date;
   lesson: {
@@ -24,6 +26,10 @@ export type NoteSummary = {
     id: string;
     title: string;
   } | null;
+  resource: {
+    id: string;
+    title: string;
+  } | null;
 };
 
 type ListOptions = {
@@ -31,8 +37,10 @@ type ListOptions = {
   curriculumId?: string;
   /** Restrict to notes attached to this lesson. */
   lessonId?: string;
-  /** Only free-form (no lesson, no curriculum) user notes. */
-  scope?: "all" | "user" | "curriculum" | "lesson";
+  /** Restrict to notes attached to this resource. */
+  resourceId?: string;
+  /** Only free-form (no lesson, no curriculum, no resource) user notes. */
+  scope?: "all" | "user" | "curriculum" | "lesson" | "resource";
 };
 
 export async function getUserNotes(opts: ListOptions = {}): Promise<NoteSummary[]> {
@@ -46,6 +54,8 @@ export async function getUserNotes(opts: ListOptions = {}): Promise<NoteSummary[
 
   if (opts.lessonId) {
     where.lessonId = opts.lessonId;
+  } else if (opts.resourceId) {
+    where.resourceId = opts.resourceId;
   } else if (opts.curriculumId) {
     // Either notes scoped directly to the curriculum, or to a lesson that
     // belongs to the curriculum.
@@ -56,6 +66,7 @@ export async function getUserNotes(opts: ListOptions = {}): Promise<NoteSummary[
   } else if (opts.scope === "user") {
     where.lessonId = null;
     where.curriculumId = null;
+    where.resourceId = null;
   }
 
   const rows = await prisma.note.findMany({
@@ -71,6 +82,7 @@ export async function getUserNotes(opts: ListOptions = {}): Promise<NoteSummary[
         },
       },
       curriculum: { select: { id: true, title: true } },
+      resource: { select: { id: true, title: true } },
     },
   });
 
@@ -82,6 +94,8 @@ export async function getUserNotes(opts: ListOptions = {}): Promise<NoteSummary[
     isAnnotation: row.isAnnotation,
     lessonId: row.lessonId,
     curriculumId: row.curriculumId,
+    resourceId: row.resourceId,
+    tags: row.tags,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     lesson: row.lesson
@@ -94,6 +108,9 @@ export async function getUserNotes(opts: ListOptions = {}): Promise<NoteSummary[
       : null,
     curriculum: row.curriculum
       ? { id: row.curriculum.id, title: row.curriculum.title }
+      : null,
+    resource: row.resource
+      ? { id: row.resource.id, title: row.resource.title }
       : null,
   }));
 }
@@ -127,6 +144,7 @@ export async function getNoteForCurrentUser(
         },
       },
       curriculum: { select: { id: true, title: true } },
+      resource: { select: { id: true, title: true } },
     },
   });
   if (!note) return null;
@@ -149,6 +167,8 @@ export async function getNoteForCurrentUser(
     isAnnotation: note.isAnnotation,
     lessonId: note.lessonId,
     curriculumId: note.curriculumId,
+    resourceId: note.resourceId,
+    tags: note.tags,
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
     lesson: note.lesson
@@ -161,6 +181,9 @@ export async function getNoteForCurrentUser(
       : null,
     curriculum: note.curriculum
       ? { id: note.curriculum.id, title: note.curriculum.title }
+      : null,
+    resource: note.resource
+      ? { id: note.resource.id, title: note.resource.title }
       : null,
     prevId,
     nextId,

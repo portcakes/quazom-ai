@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { SparklesIcon, XIcon } from "lucide-react";
+import { SparklesIcon, TagIcon, XIcon } from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { Input } from "@quazom-ai/ui/components/ui/input";
 import { Label } from "@quazom-ai/ui/components/ui/label";
@@ -15,6 +15,7 @@ import {
   NOTE_MAX_LENGTH,
 } from "@/inngest/schemas";
 import { MarkdownEditor } from "./markdown-editor";
+import { NoteTagsInput } from "./note-tags-input";
 
 type Props = {
   open: boolean;
@@ -23,6 +24,8 @@ type Props = {
   lessonId?: string | null;
   /** Pre-attach the new note to this curriculum. */
   curriculumId?: string | null;
+  /** Pre-attach the new note to this resource. */
+  resourceId?: string | null;
   /** Optional initial content (e.g. a pre-filled markdown quote block). */
   initialContent?: string;
   /** Optional initial title. */
@@ -66,6 +69,7 @@ export function NoteBottomSheet({
   onOpenChange,
   lessonId,
   curriculumId,
+  resourceId,
   initialContent = "",
   initialTitle = "",
   onCreated,
@@ -101,9 +105,10 @@ export function NoteBottomSheet({
         >
           {open ? (
             <NoteBottomSheetForm
-              key={`${lessonId ?? "no-lesson"}:${initialContent.length}`}
+              key={`${lessonId ?? "no-lesson"}:${resourceId ?? "no-resource"}:${initialContent.length}`}
               lessonId={lessonId ?? null}
               curriculumId={curriculumId ?? null}
+              resourceId={resourceId ?? null}
               initialContent={initialContent}
               initialTitle={initialTitle}
               onClose={() => onOpenChange(false)}
@@ -119,6 +124,7 @@ export function NoteBottomSheet({
 function NoteBottomSheetForm({
   lessonId,
   curriculumId,
+  resourceId,
   initialContent,
   initialTitle,
   onClose,
@@ -126,6 +132,7 @@ function NoteBottomSheetForm({
 }: {
   lessonId: string | null;
   curriculumId: string | null;
+  resourceId: string | null;
   initialContent: string;
   initialTitle: string;
   onClose: () => void;
@@ -136,6 +143,8 @@ function NoteBottomSheetForm({
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState("");
   const [content, setContent] = useState(initialContent);
+  const [tags, setTags] = useState<string[]>([]);
+  const [showTags, setShowTags] = useState(false);
 
   // Editor height the user is currently dragging to. Clamped to
   // [TEXTAREA_DEFAULT_PX * MIN_RATIO, TEXTAREA_DEFAULT_PX]. Initialised
@@ -263,8 +272,10 @@ function NoteBottomSheetForm({
       title: title.trim() || undefined,
       description: description.trim() || undefined,
       content,
+      tags: tags.length > 0 ? tags : undefined,
       lessonId: lessonId ?? undefined,
       curriculumId: curriculumId ?? undefined,
+      resourceId: resourceId ?? undefined,
     });
   };
 
@@ -349,6 +360,29 @@ function NoteBottomSheetForm({
               maxLength={NOTE_DESCRIPTION_MAX_LENGTH}
               placeholder="A 1-2 sentence summary of this note…"
             />
+          </div>
+          <div className="flex flex-col gap-2">
+            {showTags || tags.length > 0 ? (
+              <>
+                <Label htmlFor="bs-note-tags">Tags</Label>
+                <NoteTagsInput
+                  inputId="bs-note-tags"
+                  value={tags}
+                  onChange={setTags}
+                />
+              </>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="w-fit cursor-pointer text-muted-foreground hover:text-foreground"
+                onClick={() => setShowTags(true)}
+              >
+                <TagIcon className="size-3.5" />
+                Add tags
+              </Button>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="bs-note-content">Note</Label>

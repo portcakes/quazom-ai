@@ -436,3 +436,60 @@ export const NOTE_MAX_LENGTH = 20000;
 export const NOTE_DESCRIPTION_MAX_LENGTH = 500;
 export const ANNOTATION_QUOTE_MAX_LENGTH = 2000;
 export const ANNOTATION_TEXT_MAX_LENGTH = 2000;
+
+// Per-tag character cap and how many tags we let a single note carry. The
+// note editor enforces these client-side, and tRPC re-validates so a bad
+// client can't smuggle a 50-tag note past us.
+export const NOTE_TAG_MAX_LENGTH = 32;
+export const NOTE_MAX_TAGS = 12;
+
+// Resource feature constants. These are intentionally generous — files
+// over the cap should fail at the signed-URL step rather than client-side
+// so users see a clear error.
+export const RESOURCE_TITLE_MAX_LENGTH = 200;
+export const RESOURCE_DESCRIPTION_MAX_LENGTH = 1000;
+export const RESOURCE_URL_MAX_LENGTH = 2048;
+export const RESOURCE_FILE_MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+export const RESOURCE_CONTENT_MAX_LENGTH = 200_000; // ~200k chars for extracted/cached text
+
+// Hex colours we expose to the highlight toolbar. The DB stores the enum
+// (uppercase) so the renderer is free to remap to Tailwind classes; this
+// constant is the source of truth for "which colours can the user pick".
+export const annotationColors = [
+  "YELLOW",
+  "PINK",
+  "BLUE",
+  "ORANGE",
+  "GREEN",
+] as const;
+export type AnnotationColor = (typeof annotationColors)[number];
+
+// Resource file types we accept for upload right now. PDFs are rendered in
+// an iframe; TXT/MD have their body cached on Resource.content so they
+// render through the existing markdown pipeline.
+export const resourceFileTypes = ["TXT", "PDF", "MD"] as const;
+export type ResourceFileType = (typeof resourceFileTypes)[number];
+
+export const resourceKinds = ["LINK", "FILE"] as const;
+export type ResourceKind = (typeof resourceKinds)[number];
+
+// Status of a Resource. Mirrors the Prisma enum. LINKs go straight to READY
+// when extraction is queued lazily; FILE resources start at PENDING and flip
+// to READY after the client confirms an R2 upload.
+export const resourceStatuses = ["PENDING", "READY", "FAILED"] as const;
+export type ResourceStatus = (typeof resourceStatuses)[number];
+
+// Map the Prisma enum to the MIME types we accept on upload. The signed
+// PUT URL pins the content type, so spoofing this would require also
+// spoofing the file extension AND the content-type — both server-checked.
+export const resourceMimeTypes: Record<ResourceFileType, string[]> = {
+  TXT: ["text/plain"],
+  PDF: ["application/pdf"],
+  MD: ["text/markdown", "text/x-markdown", "text/plain"],
+};
+
+export const resourceFileExtensions: Record<ResourceFileType, string[]> = {
+  TXT: [".txt"],
+  PDF: [".pdf"],
+  MD: [".md", ".markdown"],
+};

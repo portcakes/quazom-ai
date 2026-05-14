@@ -69,7 +69,11 @@ export function CurriculumTabs({
           <ModulesTab curriculumId={id} modules={modules} progress={progress} />
         </TabsContent>
         <TabsContent value="resources" className="mt-6">
-          <ResourcesTab resources={resources} />
+          <ResourcesTab
+            curriculumId={id}
+            curriculumTitle={title}
+            resources={resources}
+          />
         </TabsContent>
         <TabsContent value="notes" className="mt-6">
           <CurriculumNotesTab curriculumId={id} />

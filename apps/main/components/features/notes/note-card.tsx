@@ -1,7 +1,13 @@
 "use client";
 
-import { BookIcon, GraduationCapIcon, HighlighterIcon } from "lucide-react";
+import {
+  BookIcon,
+  GraduationCapIcon,
+  HighlighterIcon,
+  LibraryIcon,
+} from "lucide-react";
 import Link from "next/link";
+import { Badge } from "@quazom-ai/ui/components/ui/badge";
 
 export type NoteCardData = {
   id: string;
@@ -11,9 +17,12 @@ export type NoteCardData = {
   isAnnotation?: boolean;
   lessonId: string | null;
   curriculumId: string | null;
+  resourceId?: string | null;
+  tags?: string[];
   updatedAt: Date | string;
   lesson: { id: string; title: string; curriculumId: string } | null;
   curriculum: { id: string; title: string } | null;
+  resource?: { id: string; title: string } | null;
 };
 
 type Props = {
@@ -56,6 +65,24 @@ export function NoteCard({ note }: Props) {
       <p className="line-clamp-6 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
         {preview}
       </p>
+      {note.tags && note.tags.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1">
+          {note.tags.slice(0, 4).map((tag) => (
+            <Badge
+              key={tag}
+              variant="outline"
+              className="text-[10px] font-normal lowercase"
+            >
+              #{tag}
+            </Badge>
+          ))}
+          {note.tags.length > 4 ? (
+            <span className="text-[10px] text-muted-foreground">
+              +{note.tags.length - 4}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-2 text-xs text-muted-foreground">
         {note.isAnnotation ? (
           <ContextChip icon={<HighlighterIcon className="size-3" />}>
@@ -70,6 +97,11 @@ export function NoteCard({ note }: Props) {
         {note.lesson ? (
           <ContextChip icon={<BookIcon className="size-3" />}>
             {note.lesson.title}
+          </ContextChip>
+        ) : null}
+        {note.resource ? (
+          <ContextChip icon={<LibraryIcon className="size-3" />}>
+            {note.resource.title}
           </ContextChip>
         ) : null}
       </div>

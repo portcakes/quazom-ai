@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { HighlighterIcon, QuoteIcon } from "lucide-react";
+import { PenLineIcon, QuoteIcon } from "lucide-react";
 import { cn } from "@quazom-ai/ui/lib/utils";
+import type { AnnotationColor } from "@/inngest/schemas";
+import {
+  ANNOTATION_COLOR_ORDER,
+  ANNOTATION_LABEL,
+  ANNOTATION_SWATCH,
+} from "@/lib/annotation-colors";
 
 type Position = { top: number; left: number };
 
@@ -12,6 +18,9 @@ type Props = {
   /** Selected text. Used to disable buttons when empty. */
   selectionText: string;
   onQuote: () => void;
+  /** Quick-path: instantly save a colour-only highlight. */
+  onHighlight: (color: AnnotationColor) => void;
+  /** Slow-path: open the annotate dialog (commentary + colour picker). */
   onAnnotate: () => void;
   onDismiss: () => void;
 };
@@ -27,6 +36,7 @@ export function HighlightToolbar({
   position,
   selectionText,
   onQuote,
+  onHighlight,
   onAnnotate,
   onDismiss,
 }: Props) {
@@ -65,16 +75,32 @@ export function HighlightToolbar({
           className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium hover:bg-muted"
         >
           <QuoteIcon className="size-3.5" />
-          Insert as quote
+          <span className="hidden sm:inline">Quote</span>
         </button>
+        <span aria-hidden className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-0.5 px-1">
+          {ANNOTATION_COLOR_ORDER.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => onHighlight(c)}
+              aria-label={`Highlight ${ANNOTATION_LABEL[c]}`}
+              title={`Highlight ${ANNOTATION_LABEL[c]}`}
+              className={cn(
+                "size-5 rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover",
+                ANNOTATION_SWATCH[c],
+              )}
+            />
+          ))}
+        </div>
         <span aria-hidden className="h-4 w-px bg-border" />
         <button
           type="button"
           onClick={onAnnotate}
           className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium hover:bg-muted"
         >
-          <HighlighterIcon className="size-3.5" />
-          Annotate
+          <PenLineIcon className="size-3.5" />
+          <span className="hidden sm:inline">Add note</span>
         </button>
       </div>
     </div>

@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeftIcon, PlusIcon } from "lucide-react";
+import { ArrowLeftIcon, LibraryIcon, PlusIcon } from "lucide-react";
 import { Badge } from "@quazom-ai/ui/components/ui/badge";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { cn } from "@quazom-ai/ui/lib/utils";
 import type { LessonDetail } from "@/lib/queries/lesson";
 import { NoteBottomSheet } from "@/components/features/notes/note-bottom-sheet";
+import { AddResourceDialog } from "@/components/features/resources/add-resource-dialog";
 
 type Props = {
   lesson: Pick<
@@ -24,6 +25,7 @@ export function LessonHero({ lesson }: Props) {
   const heroRef = useRef<HTMLElement>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [resourceOpen, setResourceOpen] = useState(false);
 
   useEffect(() => {
     const el = heroRef.current;
@@ -73,15 +75,27 @@ export function LessonHero({ lesson }: Props) {
                 {lesson.title}
               </h2>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              className="shrink-0 cursor-pointer"
-              onClick={() => setNoteOpen(true)}
-            >
-              <PlusIcon className="size-4" />
-              Create note
-            </Button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                className="cursor-pointer"
+                onClick={() => setNoteOpen(true)}
+              >
+                <PlusIcon className="size-4" />
+                <span className="hidden sm:inline">Create note</span>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                onClick={() => setResourceOpen(true)}
+              >
+                <LibraryIcon className="size-4" />
+                <span className="hidden sm:inline">Add resource</span>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -101,16 +115,28 @@ export function LessonHero({ lesson }: Props) {
               <span className="text-muted-foreground/60">/</span>
               <span className="truncate">{lesson.module.title}</span>
             </Link>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="shrink-0 cursor-pointer"
-              onClick={() => setNoteOpen(true)}
-            >
-              <PlusIcon className="size-4" />
-              Create note
-            </Button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                onClick={() => setNoteOpen(true)}
+              >
+                <PlusIcon className="size-4" />
+                Create note
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                onClick={() => setResourceOpen(true)}
+              >
+                <LibraryIcon className="size-4" />
+                Add resource
+              </Button>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary" className="capitalize">
@@ -136,6 +162,16 @@ export function LessonHero({ lesson }: Props) {
         onOpenChange={setNoteOpen}
         lessonId={lesson.id}
         curriculumId={lesson.module.curriculum.id}
+      />
+
+      <AddResourceDialog
+        open={resourceOpen}
+        onOpenChange={setResourceOpen}
+        scope={{
+          lessonId: lesson.id,
+          curriculumId: lesson.module.curriculum.id,
+        }}
+        scopeLabel={lesson.title}
       />
     </>
   );

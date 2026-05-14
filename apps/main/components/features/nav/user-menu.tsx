@@ -18,6 +18,7 @@ import {
 import {
   CalendarIcon,
   ChevronUpIcon,
+  LibraryIcon,
   LogOutIcon,
   PenSquareIcon,
   SettingsIcon,
@@ -130,6 +131,12 @@ export function UserMenu({ firstName, fullName, avatarUrl }: UserMenuProps) {
           <Link href="/notes" onClick={optionsClick}>
             <StickyNoteIcon />
             <span>Notes</span>
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild className="cursor-pointer">
+          <Link href="/resources" onClick={optionsClick}>
+            <LibraryIcon />
+            <span>Resources</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild className="cursor-pointer">

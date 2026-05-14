@@ -13,11 +13,20 @@ import {
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { useTRPC } from "@/trpc/client";
 import { Markdown } from "@/components/shared/markdown";
+import type { AnnotationColor } from "@/inngest/schemas";
+import {
+  ANNOTATION_HIGHLIGHT_BASE,
+  ANNOTATION_HIGHLIGHT_INTERACTIVE,
+} from "@/lib/annotation-colors";
 
 export type AnnotationForRender = {
   id: string;
   quote: string;
-  annotation: string;
+  /** `null` for a colour-only highlight (no popover). */
+  annotation: string | null;
+  /** Highlight colour the user picked from the toolbar. Optional so legacy
+   *  callers can drop the field and get the default yellow look. */
+  color?: AnnotationColor | null;
 };
 
 type Props = {
@@ -125,11 +134,18 @@ export function AnnotatedMarkdown({
             (props as { "data-annot-id"?: string })["data-annot-id"] ??
             (props as { dataAnnotId?: string }).dataAnnotId;
           const annot = id ? annotationMap.get(id) : null;
+          const colorKey: AnnotationColor = annot?.color ?? "YELLOW";
           if (!annot) {
             return (
-              <mark className="rounded-sm bg-yellow-200/50 px-0.5 dark:bg-yellow-400/20">
-                {c}
-              </mark>
+              <mark className={ANNOTATION_HIGHLIGHT_BASE[colorKey]}>{c}</mark>
+            );
+          }
+          // Colour-only highlight (no commentary) ⇒ no popover. Renders as
+          // a plain coloured `<mark>` so the user sees the highlight but
+          // doesn't get a stub popover with nothing useful in it.
+          if (!annot.annotation || annot.annotation.trim().length === 0) {
+            return (
+              <mark className={ANNOTATION_HIGHLIGHT_BASE[colorKey]}>{c}</mark>
             );
           }
           return <AnnotationMark annotation={annot}>{c}</AnnotationMark>;
@@ -207,6 +223,11 @@ function AnnotationMark({
         onMouseLeave: scheduleHoverClose,
       };
 
+  const colorKey: AnnotationColor = annotation.color ?? "YELLOW";
+  const interactiveClass = `${ANNOTATION_HIGHLIGHT_INTERACTIVE[colorKey]} ${
+    isCoarsePointer ? "cursor-pointer" : "cursor-help"
+  }`;
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverAnchor asChild>
@@ -234,11 +255,7 @@ function AnnotationMark({
             }
           }}
           {...hoverProps}
-          className={
-            isCoarsePointer
-              ? "cursor-pointer rounded-sm bg-yellow-200/60 px-0.5 underline decoration-yellow-700/50 decoration-dotted underline-offset-4 dark:bg-yellow-400/25 dark:decoration-yellow-300/60"
-              : "cursor-help rounded-sm bg-yellow-200/60 px-0.5 underline decoration-yellow-700/50 decoration-dotted underline-offset-4 dark:bg-yellow-400/25 dark:decoration-yellow-300/60"
-          }
+          className={interactiveClass}
         >
           {children}
         </mark>
@@ -262,7 +279,7 @@ function AnnotationMark({
       >
         <div className="flex flex-col gap-2">
           <p className="whitespace-pre-wrap text-sm leading-relaxed">
-            {annotation.annotation}
+            {annotation.annotation ?? ""}
           </p>
           <div className="flex items-center justify-end">
             <Button
