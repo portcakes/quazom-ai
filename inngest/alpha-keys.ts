@@ -57,7 +57,21 @@ export function generateAlphaAccessKey(): string {
 /**
  * Resolves the base URL the admin / cron prepend to alpha-invite registration
  * links. Falls back to localhost so dev still works without env wiring.
+ *
+ * Defensively strips a leading `www.` from the hostname so a Vercel env typo
+ * (e.g. `https://www.app.quazom.ai`) can't ship unreachable links — the app
+ * is hosted at the apex `app.quazom.ai` and the `www.` subdomain has no DNS
+ * or cert, so the browser falls through to chrome-error://chromewebdata/.
+ * If the env value isn't a parseable URL we hand it back unchanged so dev
+ * fallbacks (and any future scheme we don't anticipate) still work.
  */
 export function getRegisterBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_MAIN_URL ?? "http://localhost:3001";
+  const raw = process.env.NEXT_PUBLIC_MAIN_URL ?? "http://localhost:3001";
+  try {
+    const url = new URL(raw);
+    url.hostname = url.hostname.replace(/^www\./i, "");
+    return url.origin;
+  } catch {
+    return raw;
+  }
 }
