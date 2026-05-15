@@ -118,6 +118,9 @@ function SiteHeader() {
         </Link>
         <nav className="flex items-center gap-2 sm:gap-3">
           <Button asChild variant="ghost" size="sm">
+            <Link href="/pricing">Pricing</Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
             <a href={`${MAIN_URL}/login`}>Sign in</a>
           </Button>
           <Button asChild size="sm" className="font-medium">

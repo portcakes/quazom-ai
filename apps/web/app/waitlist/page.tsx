@@ -105,6 +105,9 @@ function SiteHeader() {
             </Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
+            <Link href="/pricing">Pricing</Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
             <a href={`${MAIN_URL}/login`}>Sign in</a>
           </Button>
         </nav>

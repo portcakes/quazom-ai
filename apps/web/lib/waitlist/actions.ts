@@ -5,7 +5,7 @@ import { z } from "zod";
 import prisma from "@quazom-ai/db";
 import { sendWaitlistWelcome } from "@quazom-ai/emails";
 
-export type WaitlistSource = "homepage" | "waitlist-page";
+export type WaitlistSource = "homepage" | "waitlist-page" | "pricing-page";
 
 export type WaitlistJoinResult =
   | { ok: true }
@@ -22,7 +22,7 @@ const waitlistInputSchema = z.object({
     .trim()
     .toLowerCase()
     .email("Please enter a valid email address."),
-  source: z.enum(["homepage", "waitlist-page"]),
+  source: z.enum(["homepage", "waitlist-page", "pricing-page"]),
 });
 
 export async function joinWaitlist(input: {
