@@ -1,12 +1,20 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import prisma from "@quazom-ai/db";
-import { polar, checkout, portal, usage, webhooks } from "@polar-sh/better-auth";
-import { Polar } from "@polar-sh/sdk";
+import { polar, checkout, portal, webhooks } from "@polar-sh/better-auth";
+import { polarClient } from "./polar";
 import {
   sendEmailVerification,
   sendPasswordReset,
 } from "@quazom-ai/emails";
+import {
+  onSubscriptionActive,
+  onSubscriptionCanceled,
+  onSubscriptionCreated,
+  onSubscriptionRevoked,
+  onSubscriptionUpdated,
+} from "./subscription/webhook-handlers";
+import { PLANS } from "./subscription/plans";
 
 // Origins the Better Auth API is allowed to accept requests from. Anything not
 // in this list (matched against the browser's `Origin` header) gets a 403
@@ -123,4 +131,43 @@ export const auth = betterAuth({
         },
     },
     trustedOrigins,
+    plugins: [
+        polar({
+            client: polarClient,
+            createCustomerOnSignUp: true,
+            use: [
+                // Product slug catalogue is sourced from the same registry the
+                // settings page renders so a price change is one edit away.
+                checkout({
+                    products: Object.values(PLANS).flatMap((plan) =>
+                        (Object.entries(plan.pricing) as Array<
+                            [
+                                "MONTH" | "YEAR",
+                                (typeof plan.pricing)["MONTH"],
+                            ]
+                        >).map(([, product]) => ({
+                            productId: product.productId,
+                            slug: product.slug,
+                        })),
+                    ),
+                    successUrl: process.env.POLAR_SUCCESS_URL,
+                    authenticatedUsersOnly: true,
+                }),
+                portal(),
+                // POLAR_WEBHOOK_SECRET is required for the webhook plugin to
+                // verify signatures. In dev we tolerate it being unset by
+                // falling back to an empty string — the webhook endpoint
+                // simply won't accept any payloads until it's configured,
+                // which is what we want.
+                webhooks({
+                    secret: process.env.POLAR_WEBHOOK_SECRET ?? "",
+                    onSubscriptionCreated,
+                    onSubscriptionUpdated,
+                    onSubscriptionActive,
+                    onSubscriptionCanceled,
+                    onSubscriptionRevoked,
+                }),
+            ]
+        }),
+    ],
 });

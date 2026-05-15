@@ -23,9 +23,30 @@ model User {
   // compromised signup flow can't escalate.
   isAdmin         Boolean           @default(false)
   // Alpha-program flag. Drives the per-user generation limits (curricula,
-  // lessons, discussions) — every existing and new user defaults to true
-  // until the alpha period ends.
+  // lessons, discussions) when the user has no paid subscription. Every
+  // existing and new user defaults to true until the alpha period ends; a
+  // paid Polar subscription supersedes alpha caps via `subscriptionPlan`.
   isAlpha         Boolean           @default(true)
+  // Active paid plan slug, mirrored from the user's Polar customer state by
+  // the polar webhook. NULL means no paid plan (alpha or free). Currently
+  // one of: "EXPLORER", "SCHOLAR".
+  subscriptionPlan     String?
+  // Billing interval for the active subscription: "MONTH" or "YEAR". NULL
+  // when `subscriptionPlan` is NULL.
+  subscriptionInterval String?
+  // Stable Polar customer id for this user — set when Polar's "customer
+  // created" webhook fires (or when checkout opens). Lets the webhook
+  // route customer-scoped events back to the right user without an
+  // email lookup.
+  polarCustomerId      String?
+  // Slugs of the long-form titles ("Founding Explorer", etc.) the user
+  // has unlocked. Earned by upgrading to a paid plan during the relevant
+  // window; persisted forever once granted so a downgrade doesn't strip
+  // the badge they paid to earn.
+  earnedTitles         String[]     @default([])
+  // Currently displayed title slug — must be a member of `earnedTitles`.
+  // NULL hides any title from the sidebar.
+  selectedTitle        String?
   // Soft-disable. When true, the user can sign in but `requireAuth` bounces
   // them to /account-disabled where they can re-enable or sign out. Hard
   // deletes go through Better Auth + Prisma cascade and do not set this.

@@ -35,6 +35,8 @@ import { useTRPC } from "@/trpc/client";
 import { DisableAccountDialog } from "./disable-account-dialog";
 import { DeleteAccountDialog } from "./delete-account-dialog";
 import { UsageMeter } from "./usage-meter";
+import { SubscriptionCard } from "./subscription-card";
+import { TitlePicker } from "./title-picker";
 import { ThemePicker } from "@/components/shared/theme-picker";
 import { TimezonePicker } from "@/components/shared/timezone-picker";
 
@@ -78,6 +80,10 @@ export function SettingsView({ initialUser }: Props) {
       email: initialUser.email,
       image: initialUser.avatarUrl,
       isAlpha: initialUser.isAlpha,
+      subscriptionPlan: null,
+      subscriptionInterval: null,
+      earnedTitles: [],
+      selectedTitle: null,
       isDisabled: false,
       timezone: initialUser.timezone,
     },
@@ -299,17 +305,20 @@ export function SettingsView({ initialUser }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Alpha plan usage</CardTitle>
+          <CardTitle>Plan usage</CardTitle>
           <CardDescription>
-            Alpha accounts have generation caps so we can keep things free
-            during the early access period. Lesson and discussion caps reset on
-            the 1st of each month.
+            Generation caps apply per plan. Monthly counters reset on the 1st;
+            Scholar removes the caps entirely.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <UsageMeter usage={usageQuery.data} isLoading={usageQuery.isLoading} />
         </CardContent>
       </Card>
+
+      <SubscriptionCard />
+
+      <TitlePicker />
 
       <Card className="border-destructive/40">
         <CardHeader>

@@ -44,12 +44,28 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { recordAiUsage } from '@/inngest/ai-usage';
 import {
-  ALPHA_LIMITS,
   countCurriculaForUser,
-  countLessonGenerationsThisMonth,
+  countCurriculaThisMonth,
   countDiscussionGenerationsThisMonth,
-  type AlphaUsageSnapshot,
-} from '@/lib/alpha-limits';
+  countLessonGenerationsThisMonth,
+  getPlanUsage,
+  isOverLimit,
+  LIMITS_BY_PLAN,
+  resolveEffectivePlan,
+  type EffectivePlan,
+} from '@/lib/subscription/plan-limits';
+import {
+  BILLING_INTERVALS,
+  PLAN_KEYS,
+  PLANS,
+} from '@/lib/subscription/plans';
+import {
+  TITLE_SLUGS,
+  TITLES,
+  isTitleGrantable,
+  isTitleSlug,
+  titleLabel,
+} from '@/lib/subscription/titles';
 import {
   generateSchedule,
   normalizeDateFromDb,
@@ -188,18 +204,33 @@ export const appRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Alpha-tier cost guard: cap total curricula at ALPHA_LIMITS.curricula
-      // to keep generation spend bounded while we're free.
+      // Plan-tier cost guard. SCHOLAR is unlimited so the helper short-
+      // circuits with `null`; ALPHA / FREE keep the lifetime cap; EXPLORER
+      // gets the monthly cap. Counting only kicks in when we actually have
+      // a cap to enforce.
       const user = await prisma.user.findUnique({
         where: { id: ctx.userId },
-        select: { isAlpha: true },
+        select: { isAlpha: true, subscriptionPlan: true },
       });
-      if (user?.isAlpha) {
-        const used = await countCurriculaForUser(ctx.userId);
-        if (used >= ALPHA_LIMITS.curricula) {
+      const plan = resolveEffectivePlan({
+        subscriptionPlan: user?.subscriptionPlan ?? null,
+        isAlpha: user?.isAlpha ?? false,
+      });
+      const cap = LIMITS_BY_PLAN[plan].curricula;
+      if (cap.limit !== null) {
+        const used =
+          cap.period === 'lifetime'
+            ? await countCurriculaForUser(ctx.userId)
+            : await countCurriculaThisMonth(ctx.userId);
+        if (isOverLimit({ plan, feature: 'curricula', used })) {
+          const periodLabel = cap.period === 'lifetime' ? 'total' : 'per month';
+          const reset =
+            cap.period === 'month'
+              ? ' Resets on the 1st.'
+              : ' Delete one to free up a slot.';
           throw new TRPCError({
             code: 'FORBIDDEN',
-            message: `Alpha plan is limited to ${ALPHA_LIMITS.curricula} curricula. Delete one to free up a slot.`,
+            message: `Your plan is limited to ${cap.limit} curricula ${periodLabel}.${reset}`,
           });
         }
       }
@@ -300,34 +331,54 @@ export const appRouter = createTRPCRouter({
         return { ok: true, alreadyRunning: true };
       }
 
-      // Alpha-tier monthly caps. We only count towards the cap when this is a
-      // *fresh* generation — a STUB lesson going to GENERATING. Retries on a
-      // FAILED lesson would have already counted the first time around, so
-      // they don't count again here.
+      // Plan-tier monthly caps. We only count towards the cap when this is
+      // a *fresh* generation — a STUB lesson going to GENERATING. Retries
+      // on a FAILED lesson would have already counted the first time
+      // around, so they don't count again here.
       const user = await prisma.user.findUnique({
         where: { id: ctx.userId },
-        select: { isAlpha: true },
+        select: { isAlpha: true, subscriptionPlan: true },
       });
-      if (user?.isAlpha && lesson.status === 'STUB') {
+      const plan = resolveEffectivePlan({
+        subscriptionPlan: user?.subscriptionPlan ?? null,
+        isAlpha: user?.isAlpha ?? false,
+      });
+      const lessonCap = LIMITS_BY_PLAN[plan].lessonsPerMonth;
+      const discussionCap = LIMITS_BY_PLAN[plan].discussionsPerMonth;
+      const checkLessonCap = lesson.status === 'STUB' && lessonCap.limit !== null;
+      const checkDiscussionCap =
+        lesson.status === 'STUB' &&
+        lesson.activityType === 'DISCUSSION' &&
+        discussionCap.limit !== null;
+      if (checkLessonCap || checkDiscussionCap) {
         const [lessonsUsed, discussionsUsed] = await Promise.all([
-          countLessonGenerationsThisMonth(ctx.userId),
-          lesson.activityType === 'DISCUSSION'
+          checkLessonCap
+            ? countLessonGenerationsThisMonth(ctx.userId)
+            : Promise.resolve(0),
+          checkDiscussionCap
             ? countDiscussionGenerationsThisMonth(ctx.userId)
             : Promise.resolve(0),
         ]);
-        if (lessonsUsed >= ALPHA_LIMITS.lessonsPerMonth) {
-          throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: `Alpha plan is limited to ${ALPHA_LIMITS.lessonsPerMonth} lesson generations per month. The cap resets on the 1st.`,
-          });
-        }
         if (
-          lesson.activityType === 'DISCUSSION' &&
-          discussionsUsed >= ALPHA_LIMITS.discussionsPerMonth
+          checkLessonCap &&
+          isOverLimit({ plan, feature: 'lessonsThisMonth', used: lessonsUsed })
         ) {
           throw new TRPCError({
             code: 'FORBIDDEN',
-            message: `Alpha plan is limited to ${ALPHA_LIMITS.discussionsPerMonth} discussion lessons per month. The cap resets on the 1st.`,
+            message: `Your plan is limited to ${lessonCap.limit} lesson generations per month. The cap resets on the 1st.`,
+          });
+        }
+        if (
+          checkDiscussionCap &&
+          isOverLimit({
+            plan,
+            feature: 'discussionsThisMonth',
+            used: discussionsUsed,
+          })
+        ) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: `Your plan is limited to ${discussionCap.limit} discussion lessons per month. The cap resets on the 1st.`,
           });
         }
       }
@@ -2206,6 +2257,10 @@ export const appRouter = createTRPCRouter({
         isAlpha: true,
         isDisabled: true,
         timezone: true,
+        subscriptionPlan: true,
+        subscriptionInterval: true,
+        earnedTitles: true,
+        selectedTitle: true,
       },
     });
     if (!user) {
@@ -2214,36 +2269,138 @@ export const appRouter = createTRPCRouter({
     return user;
   }),
   getAlphaUsage: protectedcProcedure.query(async ({ ctx }) => {
-    const [user, curricula, lessons, discussions] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: ctx.userId },
-        select: { isAlpha: true },
-      }),
-      countCurriculaForUser(ctx.userId),
-      countLessonGenerationsThisMonth(ctx.userId),
-      countDiscussionGenerationsThisMonth(ctx.userId),
-    ]);
-
-    const snapshot: AlphaUsageSnapshot = {
-      isAlpha: user?.isAlpha ?? false,
-      curricula: {
-        used: curricula,
-        limit: ALPHA_LIMITS.curricula,
-        remaining: Math.max(0, ALPHA_LIMITS.curricula - curricula),
-      },
-      lessonsThisMonth: {
-        used: lessons,
-        limit: ALPHA_LIMITS.lessonsPerMonth,
-        remaining: Math.max(0, ALPHA_LIMITS.lessonsPerMonth - lessons),
-      },
-      discussionsThisMonth: {
-        used: discussions,
-        limit: ALPHA_LIMITS.discussionsPerMonth,
-        remaining: Math.max(0, ALPHA_LIMITS.discussionsPerMonth - discussions),
-      },
-    };
-    return snapshot;
+    return await getPlanUsage(ctx.userId);
   }),
+
+  // ---------------------------------------------------------------------
+  // Subscription + scholarly titles
+  // ---------------------------------------------------------------------
+  // Surface the user's effective plan + the catalogue of plans the
+  // settings page renders into upgrade cards. The catalogue is static
+  // (sourced from `lib/subscription/plans.ts`) but lives in the procedure
+  // so the client doesn't have to import server-only code to render it.
+  getSubscription: protectedcProcedure.query(async ({ ctx }) => {
+    const user = await prisma.user.findUnique({
+      where: { id: ctx.userId },
+      select: {
+        isAlpha: true,
+        subscriptionPlan: true,
+        subscriptionInterval: true,
+        polarCustomerId: true,
+      },
+    });
+    const plan: EffectivePlan = resolveEffectivePlan({
+      subscriptionPlan: user?.subscriptionPlan ?? null,
+      isAlpha: user?.isAlpha ?? false,
+    });
+    return {
+      plan,
+      paidPlan:
+        user?.subscriptionPlan === 'EXPLORER' ||
+        user?.subscriptionPlan === 'SCHOLAR'
+          ? user.subscriptionPlan
+          : null,
+      interval:
+        user?.subscriptionInterval === 'MONTH' ||
+        user?.subscriptionInterval === 'YEAR'
+          ? user.subscriptionInterval
+          : null,
+      isAlpha: user?.isAlpha ?? false,
+      polarCustomerId: user?.polarCustomerId ?? null,
+      catalogue: PLAN_KEYS.map((key) => {
+        const def = PLANS[key];
+        return {
+          key: def.key,
+          label: def.label,
+          tagline: def.tagline,
+          features: def.features,
+          bestFor: def.bestFor,
+          foundingTitleSlug: def.foundingTitleSlug,
+          pricing: BILLING_INTERVALS.reduce(
+            (acc, interval) => {
+              const product = def.pricing[interval];
+              acc[interval] = {
+                slug: product.slug,
+                priceUsd: product.priceUsd,
+              };
+              return acc;
+            },
+            {} as Record<
+              (typeof BILLING_INTERVALS)[number],
+              { slug: string; priceUsd: number }
+            >,
+          ),
+        };
+      }),
+    };
+  }),
+  // Catalogue of every title (earned or not). The client uses this to
+  // render the title-picker dropdown with availability hints. Locked rows
+  // tell the user *how* to earn the title so the gamification stays
+  // discoverable without a separate "rewards" page.
+  listTitles: protectedcProcedure.query(async ({ ctx }) => {
+    const user = await prisma.user.findUnique({
+      where: { id: ctx.userId },
+      select: { earnedTitles: true, selectedTitle: true },
+    });
+    const earned = new Set<string>(user?.earnedTitles ?? []);
+    const now = new Date();
+    return {
+      selected: user?.selectedTitle ?? null,
+      titles: TITLE_SLUGS.map((slug) => {
+        const def = TITLES[slug];
+        const isEarned = earned.has(slug);
+        return {
+          slug: def.slug,
+          label: def.label,
+          description: def.description,
+          requiresPlan: def.requiresPlan,
+          availableUntil: def.availableUntil,
+          isEarned,
+          // `isGrantable` answers "can this still be obtained today?". An
+          // already-earned title is always grantable from the user's
+          // perspective; a future-only title is grantable until the cutoff.
+          isGrantable: isEarned || isTitleGrantable(slug, now),
+        };
+      }),
+    };
+  }),
+  setSelectedTitle: activeUserProcedure
+    .input(
+      z.object({
+        // `null` clears the displayed title (back to plain first-name).
+        slug: z.string().nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (input.slug !== null) {
+        if (!isTitleSlug(input.slug)) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Unknown title.',
+          });
+        }
+        const user = await prisma.user.findUnique({
+          where: { id: ctx.userId },
+          select: { earnedTitles: true },
+        });
+        if (!user?.earnedTitles?.includes(input.slug)) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'You have not earned that title yet.',
+          });
+        }
+      }
+      await prisma.user.update({
+        where: { id: ctx.userId },
+        data: { selectedTitle: input.slug },
+      });
+      return {
+        ok: true,
+        selectedTitle: input.slug,
+        selectedLabel: input.slug ? titleLabel(input.slug) : null,
+      };
+    }),
   updateProfile: activeUserProcedure
     .input(
       z.object({

@@ -50,6 +50,7 @@ export default function AppSidebar({ user }: Props) {
           firstName={user.firstName}
           fullName={user.fullName}
           avatarUrl={user.avatarUrl}
+          selectedTitleLabel={user.selectedTitleLabel}
         />
       </SidebarFooter>
     </Sidebar>

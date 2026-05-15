@@ -3,6 +3,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import prisma from "@quazom-ai/db";
+import { titleLabel } from "@/lib/subscription/titles";
 
 export type CurrentUser = {
   id: string;
@@ -13,6 +14,12 @@ export type CurrentUser = {
   isAlpha: boolean;
   isDisabled: boolean;
   timezone: string;
+  /**
+   * The user's currently displayed scholarly title (e.g. "Founding Scholar"),
+   * or `null` when nothing is selected. Surfaced beside the first name in
+   * the sidebar.
+   */
+  selectedTitleLabel: string | null;
 };
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
@@ -29,6 +36,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       isAlpha: true,
       isDisabled: true,
       timezone: true,
+      selectedTitle: true,
     },
   });
   if (!user) return null;
@@ -44,5 +52,6 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     isAlpha: user.isAlpha,
     isDisabled: user.isDisabled,
     timezone: user.timezone,
+    selectedTitleLabel: titleLabel(user.selectedTitle),
   };
 }
