@@ -3,19 +3,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Trash2Icon } from "lucide-react";
+import { PenLineIcon, Trash2Icon } from "lucide-react";
 import {
   Popover,
   PopoverAnchor,
   PopoverContent,
 } from "@quazom-ai/ui/components/ui/popover";
 import { Button } from "@quazom-ai/ui/components/ui/button";
+import { Textarea } from "@quazom-ai/ui/components/ui/textarea";
+import { cn } from "@quazom-ai/ui/lib/utils";
 import { useTRPC } from "@/trpc/client";
 import { Markdown } from "@/components/shared/markdown";
-import type { AnnotationColor } from "@/inngest/schemas";
 import {
+  ANNOTATION_TEXT_MAX_LENGTH,
+  type AnnotationColor,
+} from "@/inngest/schemas";
+import {
+  ANNOTATION_COLOR_ORDER,
   ANNOTATION_HIGHLIGHT_BASE,
   ANNOTATION_HIGHLIGHT_INTERACTIVE,
+  ANNOTATION_LABEL,
+  ANNOTATION_SWATCH,
 } from "@/lib/annotation-colors";
 
 export type AnnotationForRender = {
@@ -377,20 +385,17 @@ export function AnnotatedMarkdown({
             (props as { "data-annot-id"?: string })["data-annot-id"] ??
             (props as { dataAnnotId?: string }).dataAnnotId;
           const annot = id ? annotationMap.get(id) : null;
-          const colorKey: AnnotationColor = annot?.color ?? "YELLOW";
+          // No matching annotation in the cache (stale render, etc.): fall
+          // back to a plain coloured highlight with no popover.
           if (!annot) {
+            const colorKey: AnnotationColor = "YELLOW";
             return (
               <mark className={ANNOTATION_HIGHLIGHT_BASE[colorKey]}>{c}</mark>
             );
           }
-          // Colour-only highlight (no commentary) ⇒ no popover. Renders as
-          // a plain coloured `<mark>` so the user sees the highlight but
-          // doesn't get a stub popover with nothing useful in it.
-          if (!annot.annotation || annot.annotation.trim().length === 0) {
-            return (
-              <mark className={ANNOTATION_HIGHLIGHT_BASE[colorKey]}>{c}</mark>
-            );
-          }
+          // Every real annotation (commentary or colour-only) gets the
+          // interactive popover so the user can change the colour or clear
+          // the highlight.
           return <AnnotationMark annotation={annot}>{c}</AnnotationMark>;
         },
       }}
@@ -438,10 +443,82 @@ function AnnotationMark({
 
   useEffect(() => () => cancelHoverClose(), [cancelHoverClose]);
 
+  // `listAnnotations` is cached as an array per `{lessonId | resourceId}`. We
+  // use `pathFilter()` (matches all of them) so a single mutation updates
+  // every cached view in one go — keeps the highlight color/removal in sync
+  // across e.g. the lesson body and the resource panel.
+  type CachedAnnotation = {
+    id: string;
+    quote: string;
+    annotation: string | null;
+    color?: AnnotationColor | null;
+    [extra: string]: unknown;
+  };
+
+  const recolor = useMutation(
+    trpc.updateAnnotation.mutationOptions({
+      // Optimistic: flip the color in the cache immediately so the
+      // highlight repaints without waiting for the round trip.
+      onMutate: async ({ id, color }) => {
+        if (!color) return { snapshot: [] };
+        const filter = trpc.listAnnotations.pathFilter();
+        await queryClient.cancelQueries(filter);
+        const snapshot = queryClient.getQueriesData(filter);
+        queryClient.setQueriesData(filter, (old: unknown) => {
+          if (!Array.isArray(old)) return old;
+          return (old as CachedAnnotation[]).map((a) =>
+            a.id === id ? { ...a, color } : a,
+          );
+        });
+        return { snapshot };
+      },
+      onError: (err, _vars, ctx) => {
+        if (ctx?.snapshot) {
+          for (const [key, data] of ctx.snapshot) {
+            queryClient.setQueryData(key, data);
+          }
+        }
+        toast.error(err.message ?? "Failed to change colour");
+      },
+      onSettled: () => {
+        void queryClient.invalidateQueries({
+          queryKey: trpc.listAnnotations.pathKey(),
+        });
+        // The auto-managed annotations note embeds the highlight colour, so
+        // re-fetch listNotes too.
+        void queryClient.invalidateQueries({
+          queryKey: trpc.listNotes.pathKey(),
+        });
+      },
+    }),
+  );
+
   const remove = useMutation(
     trpc.deleteAnnotation.mutationOptions({
+      // Optimistic: drop the annotation from the cache so the `<mark>` is
+      // gone the moment the user clicks.
+      onMutate: async ({ id }) => {
+        const filter = trpc.listAnnotations.pathFilter();
+        await queryClient.cancelQueries(filter);
+        const snapshot = queryClient.getQueriesData(filter);
+        queryClient.setQueriesData(filter, (old: unknown) => {
+          if (!Array.isArray(old)) return old;
+          return (old as CachedAnnotation[]).filter((a) => a.id !== id);
+        });
+        return { snapshot };
+      },
+      onError: (err, _vars, ctx) => {
+        if (ctx?.snapshot) {
+          for (const [key, data] of ctx.snapshot) {
+            queryClient.setQueryData(key, data);
+          }
+        }
+        toast.error(err.message ?? "Failed to clear highlight");
+      },
       onSuccess: () => {
-        toast.success("Annotation removed");
+        toast.success("Highlight cleared");
+      },
+      onSettled: () => {
         void queryClient.invalidateQueries({
           queryKey: trpc.listAnnotations.pathKey(),
         });
@@ -449,30 +526,133 @@ function AnnotationMark({
           queryKey: trpc.listNotes.pathKey(),
         });
       },
-      onError: (err) => toast.error(err.message ?? "Failed to delete"),
+    }),
+  );
+
+  // Inline note editor. Driven by `editing`; the textarea lives in the
+  // popover body and replaces the view-mode chrome (swatches + Remove)
+  // while open so the user can focus on writing.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Focus the textarea when entering edit mode — autoFocus on the element
+  // itself races with the popover's open animation and sometimes loses.
+  useEffect(() => {
+    if (editing) {
+      // Defer to the next tick so the textarea is in the DOM.
+      const id = window.setTimeout(() => {
+        textareaRef.current?.focus();
+        // Drop the caret at the end of any pre-filled text.
+        const len = textareaRef.current?.value.length ?? 0;
+        textareaRef.current?.setSelectionRange(len, len);
+      }, 0);
+      return () => window.clearTimeout(id);
+    }
+  }, [editing]);
+
+  const saveNote = useMutation(
+    trpc.updateAnnotation.mutationOptions({
+      // Optimistic: update the commentary in the cache so the popover
+      // re-renders with the new note text immediately on save.
+      onMutate: async ({ id, annotation: nextAnnotation }) => {
+        if (nextAnnotation === undefined) return { snapshot: [] };
+        const filter = trpc.listAnnotations.pathFilter();
+        await queryClient.cancelQueries(filter);
+        const snapshot = queryClient.getQueriesData(filter);
+        queryClient.setQueriesData(filter, (old: unknown) => {
+          if (!Array.isArray(old)) return old;
+          return (old as CachedAnnotation[]).map((a) =>
+            a.id === id ? { ...a, annotation: nextAnnotation } : a,
+          );
+        });
+        return { snapshot };
+      },
+      onError: (err, _vars, ctx) => {
+        if (ctx?.snapshot) {
+          for (const [key, data] of ctx.snapshot) {
+            queryClient.setQueryData(key, data);
+          }
+        }
+        toast.error(err.message ?? "Failed to save note");
+      },
+      onSuccess: () => {
+        setEditing(false);
+        setDraft("");
+      },
+      onSettled: () => {
+        void queryClient.invalidateQueries({
+          queryKey: trpc.listAnnotations.pathKey(),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.listNotes.pathKey(),
+        });
+      },
     }),
   );
 
   // Hover-open is desktop-only; touch users tap. Synthetic mouse events
   // fire after touch on iOS, so gating on coarse-pointer detection keeps
   // the popover from flickering open during a tap-and-scroll gesture.
-  const hoverProps = isCoarsePointer
-    ? {}
-    : {
-        onMouseEnter: () => {
-          cancelHoverClose();
-          setOpen(true);
-        },
-        onMouseLeave: scheduleHoverClose,
-      };
+  // While editing we also disable the hover-close timer entirely so a
+  // mouse drift away from the popover doesn't yank the textarea out from
+  // under the user mid-typing.
+  const hoverProps =
+    isCoarsePointer || editing
+      ? {}
+      : {
+          onMouseEnter: () => {
+            cancelHoverClose();
+            setOpen(true);
+          },
+          onMouseLeave: scheduleHoverClose,
+        };
 
   const colorKey: AnnotationColor = annotation.color ?? "YELLOW";
-  const interactiveClass = `${ANNOTATION_HIGHLIGHT_INTERACTIVE[colorKey]} ${
-    isCoarsePointer ? "cursor-pointer" : "cursor-help"
-  }`;
+  const hasCommentary = Boolean(annotation.annotation?.trim());
+  // Always use the interactive style now that every highlight has a
+  // popover — the dotted underline is the visual cue that the mark is
+  // clickable.
+  const interactiveClass = `${ANNOTATION_HIGHLIGHT_INTERACTIVE[colorKey]} cursor-pointer`;
+  const busy = recolor.isPending || remove.isPending || saveNote.isPending;
+
+  const draftTrimmed = draft.trim();
+  const draftOverLimit = draftTrimmed.length > ANNOTATION_TEXT_MAX_LENGTH;
+  const currentNote = annotation.annotation ?? "";
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      // Discard any in-flight edit so the next open starts in view mode.
+      setEditing(false);
+      setDraft("");
+    }
+  };
+
+  const startEditing = () => {
+    setDraft(currentNote);
+    setEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setEditing(false);
+    setDraft("");
+  };
+
+  const handleSaveNote = () => {
+    if (draftOverLimit) return;
+    // Send `null` to clear the note entirely; otherwise send the trimmed
+    // string. Keeps the cache shape consistent with what the server stores.
+    const next: string | null = draftTrimmed.length === 0 ? null : draftTrimmed;
+    if (next === currentNote || (next === null && !hasCommentary)) {
+      cancelEditing();
+      return;
+    }
+    saveNote.mutate({ id: annotation.id, annotation: next });
+  };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverAnchor asChild>
         <mark
           role="button"
@@ -520,23 +700,127 @@ function AnnotationMark({
               onMouseLeave: scheduleHoverClose,
             })}
       >
-        <div className="flex flex-col gap-2">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">
-            {annotation.annotation ?? ""}
-          </p>
-          <div className="flex items-center justify-end">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 cursor-pointer text-destructive hover:text-destructive"
-              disabled={remove.isPending}
-              onClick={() => remove.mutate({ id: annotation.id })}
-            >
-              <Trash2Icon className="size-3.5" />
-              Delete
-            </Button>
-          </div>
+        <div className="flex flex-col gap-3">
+          {editing ? (
+            <div className="flex flex-col gap-2">
+              <Textarea
+                ref={textareaRef}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  // Cmd/Ctrl+Enter to save; Escape to cancel without
+                  // closing the popover. Stop propagation so the mark's
+                  // own keydown handler doesn't also see them.
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    cancelEditing();
+                  } else if (
+                    event.key === "Enter" &&
+                    (event.metaKey || event.ctrlKey)
+                  ) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleSaveNote();
+                  }
+                }}
+                placeholder="What should you remember about this passage?"
+                className="min-h-[96px] text-sm"
+                disabled={saveNote.isPending}
+              />
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span
+                  className={
+                    draftOverLimit
+                      ? "text-destructive"
+                      : "text-muted-foreground"
+                  }
+                >
+                  {draftTrimmed.length} / {ANNOTATION_TEXT_MAX_LENGTH}
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 cursor-pointer"
+                    disabled={saveNote.isPending}
+                    onClick={cancelEditing}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 cursor-pointer"
+                    disabled={draftOverLimit || saveNote.isPending}
+                    onClick={handleSaveNote}
+                  >
+                    {saveNote.isPending ? "Saving…" : "Save"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {hasCommentary ? (
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {annotation.annotation}
+                </p>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 cursor-pointer justify-start"
+                disabled={busy}
+                onClick={startEditing}
+              >
+                <PenLineIcon className="size-3.5" />
+                {hasCommentary ? "Edit note" : "Add note"}
+              </Button>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1">
+                  {ANNOTATION_COLOR_ORDER.map((c) => {
+                    const active = c === colorKey;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        aria-label={`Change highlight to ${ANNOTATION_LABEL[c]}`}
+                        aria-pressed={active}
+                        title={ANNOTATION_LABEL[c]}
+                        disabled={busy}
+                        onClick={() => {
+                          // No-op when clicking the already-active colour so
+                          // we don't fire a pointless write.
+                          if (active) return;
+                          recolor.mutate({ id: annotation.id, color: c });
+                        }}
+                        className={cn(
+                          "size-5 cursor-pointer rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover disabled:cursor-not-allowed disabled:opacity-60",
+                          ANNOTATION_SWATCH[c],
+                          active &&
+                            "ring-2 ring-foreground/50 ring-offset-2 ring-offset-popover",
+                        )}
+                      />
+                    );
+                  })}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 cursor-pointer text-destructive hover:text-destructive"
+                  disabled={busy}
+                  onClick={() => remove.mutate({ id: annotation.id })}
+                >
+                  <Trash2Icon className="size-3.5" />
+                  Remove
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </PopoverContent>
     </Popover>
