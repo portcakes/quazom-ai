@@ -180,8 +180,8 @@ function HeroSection() {
           </p>
         </div>
         <ScreenshotFrame
-          src="/img/screenshot-1.png"
-          alt="The Quazom dashboard, showing today's study schedule and a recent note."
+          src="/img/lightmode-darkmode.png"
+          alt="A screenshot of a Quazom curricumum, showing a lesson on 'Introduction to Deep Space Astronomy' with overview and main content. The light and dark mode versions are shown side by side."
           priority
         />
       </div>
