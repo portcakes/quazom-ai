@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRealtime } from "inngest/react";
@@ -21,7 +21,10 @@ import { Label } from "@quazom-ai/ui/components/ui/label";
 import { useTRPC, useTRPCClient } from "@/trpc/client";
 import { userChannel } from "@/inngest/channels";
 import type { LessonDetail } from "@/lib/queries/lesson";
-import { AnnotatedMarkdown } from "@/components/features/notes/annotated-markdown";
+import {
+  AnnotatedMarkdown,
+  type AnnotationForRender,
+} from "@/components/features/notes/annotated-markdown";
 import { Highlightable } from "./highlightable";
 import { LessonNotesPanel } from "./lesson-notes-panel";
 
@@ -58,6 +61,16 @@ function AssessmentBody({
   kind: "quiz" | "exercise";
   userId: string;
 }) {
+  const trpc = useTRPC();
+  // Quiz/exercise lessons support the same highlight + annotation flow as
+  // reading lessons (the body is wrapped in Highlightable below). The list
+  // has to be fetched on the client so the rehype plugin in AnnotatedMarkdown
+  // can wrap matching passages in <mark>.
+  const annotationsQuery = useQuery(
+    trpc.listAnnotations.queryOptions({ lessonId: lesson.id }),
+  );
+  const annotations = annotationsQuery.data ?? [];
+
   return (
     <Highlightable
       lessonId={lesson.id}
@@ -70,7 +83,7 @@ function AssessmentBody({
           </p>
         ) : null}
 
-        <AssessmentReading data={data} />
+        <AssessmentReading data={data} annotations={annotations} />
 
         {data.recommendedResources.length > 0 ? (
           <StudyMaterial resources={data.recommendedResources} />
@@ -87,7 +100,13 @@ function AssessmentBody({
   );
 }
 
-function AssessmentReading({ data }: { data: QuizDataLike }) {
+function AssessmentReading({
+  data,
+  annotations,
+}: {
+  data: QuizDataLike;
+  annotations: AnnotationForRender[];
+}) {
   const hasOverview = Boolean(data.overview);
   const hasContent = Boolean(data.content);
   if (!hasOverview && !hasContent) return null;
@@ -96,14 +115,20 @@ function AssessmentReading({ data }: { data: QuizDataLike }) {
       {hasOverview ? (
         <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
           <h2 className="font-heading text-lg font-semibold">Overview</h2>
-          <AnnotatedMarkdown compact className="text-muted-foreground" annotations={[]}>
+          <AnnotatedMarkdown
+            compact
+            className="text-muted-foreground"
+            annotations={annotations}
+          >
             {data.overview}
           </AnnotatedMarkdown>
         </section>
       ) : null}
       {hasContent ? (
         <article className="max-w-none">
-          <AnnotatedMarkdown annotations={[]}>{data.content}</AnnotatedMarkdown>
+          <AnnotatedMarkdown annotations={annotations}>
+            {data.content}
+          </AnnotatedMarkdown>
         </article>
       ) : null}
     </>
@@ -171,17 +196,23 @@ function QuestionsSection({
 
   const [waiting, setWaiting] = useState(false);
 
+  // Stable inputs for useRealtime — the hook's effect deps include `token`
+  // and `channel`, so an inline factory would cause it to tear down and
+  // re-subscribe (re-fetching the token) on every render of this component.
+  const channel = useMemo(() => userChannel(userId), [userId]);
+  const tokenFactory = useCallback(async () => {
+    const token = await trpcClient.realtimeToken.query();
+    return typeof token.apiBaseUrl === "string"
+      ? { key: token.key, apiBaseUrl: token.apiBaseUrl }
+      : token.key;
+  }, [trpcClient]);
+
   // Subscribe to realtime. When the AI finishes generating, refresh so the
   // server-rendered lesson detail pulls the new questions array.
   const { messages } = useRealtime({
-    channel: userChannel(userId),
+    channel,
     topics: REALTIME_TOPICS,
-    token: async () => {
-      const token = await trpcClient.realtimeToken.query();
-      return typeof token.apiBaseUrl === "string"
-        ? { key: token.key, apiBaseUrl: token.apiBaseUrl }
-        : token.key;
-    },
+    token: tokenFactory,
   });
 
   // Polling fallback for the assessmentReady realtime event. Realtime is the

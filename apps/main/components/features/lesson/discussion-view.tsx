@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useRealtime } from "inngest/react";
@@ -45,17 +45,23 @@ export function DiscussionView({ lesson, userId }: Props) {
     }),
   );
 
+  // Stable inputs for useRealtime — the hook's effect deps include `token`
+  // and `channel`, so an inline factory would cause it to tear down and
+  // re-subscribe (re-fetching the token) on every render of this component.
+  const channel = useMemo(() => userChannel(userId), [userId]);
+  const tokenFactory = useCallback(async () => {
+    const token = await trpcClient.realtimeToken.query();
+    return typeof token.apiBaseUrl === "string"
+      ? { key: token.key, apiBaseUrl: token.apiBaseUrl }
+      : token.key;
+  }, [trpcClient]);
+
   // Subscribe to realtime — when the AI reply lands, refresh the page to pull
   // the new chat history.
   const { messages } = useRealtime({
-    channel: userChannel(userId),
+    channel,
     topics: REALTIME_TOPICS,
-    token: async () => {
-      const token = await trpcClient.realtimeToken.query();
-      return typeof token.apiBaseUrl === "string"
-        ? { key: token.key, apiBaseUrl: token.apiBaseUrl }
-        : token.key;
-    },
+    token: tokenFactory,
   });
 
   const lastReplyKeyRef = useRef<string | null>(null);

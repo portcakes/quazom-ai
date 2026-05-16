@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { visit } from "unist-util-visit";
 import { Trash2Icon } from "lucide-react";
 import {
   Popover,
@@ -40,13 +39,299 @@ type Props = {
   allowInlineHtml?: boolean;
 };
 
+// hast node stubs — minimal shape used by our walker. react-markdown gives us
+// a `root` element whose children are block elements; both `root` and
+// `element` nodes expose a `children` array.
+type HastText = { type: "text"; value: string };
+type HastElement = {
+  type: "element";
+  tagName: string;
+  properties?: Record<string, unknown>;
+  children: HastNode[];
+};
+type HastContainer = { type?: string; children: HastNode[] };
+type HastNode = HastText | HastElement | HastContainer;
+
+type LeafRef = {
+  node: HastText;
+  parent: HastContainer;
+  indexInParent: number;
+};
+
+type CharSource = { leafIdx: number; offset: number } | null;
+
+// Block-level elements: when we cross one of these we emit a virtual "\n"
+// in the flat text so a selection that spans across paragraphs/headings can
+// still match (the browser's `selection.toString()` does the same).
+const BLOCK_TAGS = new Set([
+  "p",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "li",
+  "blockquote",
+  "td",
+  "th",
+  "dt",
+  "dd",
+  "figcaption",
+  "caption",
+  "summary",
+]);
+
+// Already-wrapped text is invisible to subsequent passes. This is what keeps
+// (a) overlapping annotations from creating nested `<mark>`s, and
+// (b) the iterate-until-no-match loop from spinning on its own output.
+const SKIP_TAGS = new Set(["mark"]);
+
+function isText(n: HastNode): n is HastText {
+  return n.type === "text";
+}
+function isElement(n: HastNode): n is HastElement {
+  return n.type === "element";
+}
+
+/**
+ * Walk the tree top-down collecting every leaf text node (in document order)
+ * along with a flat string representation. Whenever we cross into / out of a
+ * block-level element we emit a `\n` separator that doesn't belong to any
+ * leaf — that's what allows quotes selected across paragraphs/headings to
+ * line up with the flat text once both are whitespace-normalized.
+ */
+function buildFlat(root: HastContainer): {
+  leaves: LeafRef[];
+  flat: string;
+  charSource: CharSource[];
+} {
+  const leaves: LeafRef[] = [];
+  let flat = "";
+  const charSource: CharSource[] = [];
+  // Suppress leading separators by pretending we just emitted one.
+  let lastWasSeparator = true;
+
+  function emit(value: string, source: CharSource) {
+    for (let i = 0; i < value.length; i++) {
+      flat += value.charAt(i);
+      charSource.push(
+        source
+          ? { leafIdx: source.leafIdx, offset: source.offset + i }
+          : null,
+      );
+    }
+  }
+
+  function maybeSeparator() {
+    if (lastWasSeparator) return;
+    emit("\n", null);
+    lastWasSeparator = true;
+  }
+
+  function walk(node: HastNode, parent: HastContainer, indexInParent: number) {
+    if (isText(node)) {
+      const value = node.value ?? "";
+      if (value.length === 0) return;
+      const leafIdx = leaves.length;
+      leaves.push({ node, parent, indexInParent });
+      emit(value, { leafIdx, offset: 0 });
+      lastWasSeparator = false;
+      return;
+    }
+    if (!isElement(node)) return;
+    if (SKIP_TAGS.has(node.tagName)) return;
+    const isBlock = BLOCK_TAGS.has(node.tagName);
+    if (isBlock) maybeSeparator();
+    const children = node.children ?? [];
+    for (let i = 0; i < children.length; i++) {
+      walk(children[i]!, node, i);
+    }
+    if (isBlock) maybeSeparator();
+  }
+
+  const children = root.children ?? [];
+  for (let i = 0; i < children.length; i++) {
+    walk(children[i]!, root, i);
+  }
+
+  return { leaves, flat, charSource };
+}
+
+/**
+ * Collapse runs of whitespace in `flat` to a single space and return a map
+ * from each char in the normalized result back to its index in `flat`. The
+ * map lets us trace a normalized-text match back to the original leaves.
+ * Leading whitespace is suppressed; at most one trailing space is kept.
+ */
+function normalizeFlat(flat: string): { normalized: string; map: number[] } {
+  let normalized = "";
+  const map: number[] = [];
+  let prevWS = true;
+  for (let i = 0; i < flat.length; i++) {
+    const c = flat.charAt(i);
+    if (/\s/.test(c)) {
+      if (!prevWS) {
+        normalized += " ";
+        map.push(i);
+        prevWS = true;
+      }
+    } else {
+      normalized += c;
+      map.push(i);
+      prevWS = false;
+    }
+  }
+  return { normalized, map };
+}
+
+/** Mirror normalizeFlat for a user-supplied quote (no need to track map). */
+function normalizeQuote(quote: string): string {
+  return quote.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Find every non-overlapping occurrence of `quoteNorm` in the normalized
+ * flat text. Each result is expressed in terms of leaves + offsets; virtual
+ * block separators (charSource === null) at the very start/end of a match
+ * are trimmed so we don't try to wrap something that isn't a real leaf.
+ */
+function findMatches(
+  normalized: string,
+  map: number[],
+  charSource: CharSource[],
+  quoteNorm: string,
+): Array<{
+  startLeafIdx: number;
+  startOffset: number;
+  endLeafIdx: number;
+  endOffset: number;
+}> {
+  const out: Array<{
+    startLeafIdx: number;
+    startOffset: number;
+    endLeafIdx: number;
+    endOffset: number;
+  }> = [];
+  if (quoteNorm.length === 0) return out;
+
+  let from = 0;
+  while (from <= normalized.length - quoteNorm.length) {
+    const idx = normalized.indexOf(quoteNorm, from);
+    if (idx === -1) break;
+    const endNorm = idx + quoteNorm.length;
+
+    let startFlat = map[idx] ?? -1;
+    while (
+      startFlat >= 0 &&
+      startFlat < charSource.length &&
+      charSource[startFlat] === null
+    ) {
+      startFlat++;
+    }
+    let endFlat = map[endNorm - 1] ?? -1;
+    while (endFlat >= 0 && charSource[endFlat] === null) {
+      endFlat--;
+    }
+    if (
+      startFlat < 0 ||
+      endFlat < 0 ||
+      startFlat >= charSource.length ||
+      startFlat > endFlat
+    ) {
+      from = endNorm;
+      continue;
+    }
+    const startSource = charSource[startFlat]!;
+    const endSource = charSource[endFlat]!;
+    out.push({
+      startLeafIdx: startSource.leafIdx,
+      startOffset: startSource.offset,
+      endLeafIdx: endSource.leafIdx,
+      endOffset: endSource.offset + 1, // exclusive
+    });
+    from = endNorm;
+  }
+  return out;
+}
+
+/**
+ * Splice each leaf in `[startLeafIdx, endLeafIdx]` with
+ * `[pre?, <mark>middle</mark>, post?]`. Process in reverse leaf order: each
+ * splice only affects indices *after* the spliced position within its own
+ * parent, and we never re-touch a leaf, so the recorded `indexInParent`
+ * stays valid for the still-pending leaves.
+ */
+function applyMatch(
+  leaves: LeafRef[],
+  match: {
+    startLeafIdx: number;
+    startOffset: number;
+    endLeafIdx: number;
+    endOffset: number;
+  },
+  annotationId: string,
+) {
+  for (let li = match.endLeafIdx; li >= match.startLeafIdx; li--) {
+    const leaf = leaves[li];
+    if (!leaf) continue;
+    const value = leaf.node.value ?? "";
+    const isStart = li === match.startLeafIdx;
+    const isEnd = li === match.endLeafIdx;
+    const sliceStart = isStart ? match.startOffset : 0;
+    const sliceEnd = isEnd ? match.endOffset : value.length;
+    const pre = value.slice(0, sliceStart);
+    const middle = value.slice(sliceStart, sliceEnd);
+    const post = value.slice(sliceEnd);
+    if (!middle) continue;
+
+    const replacement: HastNode[] = [];
+    if (pre) replacement.push({ type: "text", value: pre });
+    replacement.push({
+      type: "element",
+      tagName: "mark",
+      properties: { dataAnnotId: annotationId },
+      children: [{ type: "text", value: middle }],
+    });
+    if (post) replacement.push({ type: "text", value: post });
+
+    leaf.parent.children.splice(leaf.indexInParent, 1, ...replacement);
+  }
+}
+
+/**
+ * Wrap every occurrence of `annotation.quote` in the tree. We re-walk after
+ * each wrap because the splice mutates the tree (and the wrapped region is
+ * now inside a `<mark>`, which `buildFlat` skips — so the next iteration
+ * sees the *next* occurrence rather than re-matching the one we just wrapped).
+ * `MAX_ITER` is a defensive cap; in practice most annotations wrap once.
+ */
+function wrapAnnotation(
+  root: HastContainer,
+  annotation: AnnotationForRender,
+) {
+  const quoteNorm = normalizeQuote(annotation.quote);
+  if (quoteNorm.length === 0) return;
+  const MAX_ITER = 50;
+  for (let iter = 0; iter < MAX_ITER; iter++) {
+    const { leaves, flat, charSource } = buildFlat(root);
+    const { normalized, map } = normalizeFlat(flat);
+    const matches = findMatches(normalized, map, charSource, quoteNorm);
+    if (matches.length === 0) return;
+    applyMatch(leaves, matches[0]!, annotation.id);
+  }
+}
+
 /**
  * Markdown renderer that highlights stored annotation quotes inline. Each
  * matching passage is wrapped in a `<mark>` whose hover card surfaces the
- * user's commentary (and a delete button). Annotations whose quote can't be
- * found in the rendered text — typically because the highlight crossed a
- * markdown boundary — are silently skipped here; they still appear in the
- * lesson's auto-managed annotations note.
+ * user's commentary (and a delete button).
+ *
+ * Highlights can span inline formatting (bold, italic, code, links, …) and
+ * block boundaries (heading → paragraph, list item → list item). Matching is
+ * whitespace-insensitive — the browser's `selection.toString()` inserts
+ * newlines between blocks that don't exist in the source markdown, so we
+ * normalize both sides before doing the lookup.
  */
 export function AnnotatedMarkdown({
   children,
@@ -71,50 +356,8 @@ export function AnnotatedMarkdown({
 
   const rehypePlugin = useMemo(() => {
     return () => (tree: unknown) => {
-      visit(tree as never, "text", (node, index, parent) => {
-        if (!parent || typeof index !== "number") return;
-        const original: string = (node as { value?: string }).value ?? "";
-        if (!original) return;
-
-        // Try each annotation. We rebuild the text node into a sequence of
-        // text + mark nodes when we find a match. We only handle one match
-        // per pass to keep replacement deterministic; subsequent matches in
-        // the same string get picked up on the next visit since the visitor
-        // re-walks the new children.
-        for (const a of sorted) {
-          const idx = original.indexOf(a.quote);
-          if (idx === -1) continue;
-
-          const before = original.slice(0, idx);
-          const matched = original.slice(idx, idx + a.quote.length);
-          const after = original.slice(idx + a.quote.length);
-
-          const replacement = [];
-          if (before) {
-            replacement.push({ type: "text", value: before });
-          }
-          replacement.push({
-            type: "element",
-            tagName: "mark",
-            properties: {
-              dataAnnotId: a.id,
-            },
-            children: [{ type: "text", value: matched }],
-          });
-          if (after) {
-            replacement.push({ type: "text", value: after });
-          }
-
-          // Splice the new nodes into the parent's children.
-          (parent as { children: unknown[] }).children.splice(
-            index,
-            1,
-            ...replacement,
-          );
-          // Bail out — visit will pick up the inserted nodes on its own.
-          return;
-        }
-      });
+      const root = tree as HastContainer;
+      for (const a of sorted) wrapAnnotation(root, a);
     };
   }, [sorted]);
 
