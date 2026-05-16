@@ -25,11 +25,11 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Quazom — Personal curricula, built around you",
+  title: "Quazom — Personal Curricula, Built Around You",
   description:
     "Tell Quazom what you want to learn and we'll craft a complete curriculum—modules, lessons, quizzes, and projects—then keep you on track with daily check-ins and streaks.",
   openGraph: {
-    title: "Quazom — Personal curricula, built around you",
+    title: "Quazom — Personal Curricula, Built Around You",
     description:
       "Tell Quazom what you want to learn and we'll craft a complete curriculum—modules, lessons, quizzes, and projects—then keep you on track with daily check-ins and streaks.",
     images: [
