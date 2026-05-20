@@ -1076,6 +1076,157 @@ export const appRouter = createTRPCRouter({
     }),
 
   // ---------------------------------------------------------------------
+  // Continuity Notes (long-form, source-spanning learner notebook)
+  // ---------------------------------------------------------------------
+  //
+  // A ContinuityNote is NOT pinned to a single lesson/curriculum/resource.
+  // It's a rich-text notebook the user grows over time, with embedded links
+  // back to the lessons/courses/resources they're referencing. Links live
+  // inside the HTML body itself rather than in a separate join table so
+  // copy-pasting between notes preserves them automatically.
+  listContinuityNotes: protectedcProcedure.query(async ({ ctx }) => {
+    const rows = await prisma.continuityNote.findMany({
+      where: { userId: ctx.userId },
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return rows;
+  }),
+  getContinuityNote: protectedcProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const note = await prisma.continuityNote.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: {
+          id: true,
+          title: true,
+          content: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      if (!note) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Note not found' });
+      }
+      return note;
+    }),
+  createContinuityNote: activeUserProcedure
+    .input(
+      z
+        .object({
+          // Optional starting payload — the sidebar creates a blank note and
+          // the editor immediately opens it, so most calls won't pass these.
+          title: z.string().max(200).optional(),
+          content: z.string().max(NOTE_MAX_LENGTH * 4).optional(),
+        })
+        .optional(),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const note = await prisma.continuityNote.create({
+        data: {
+          id: crypto.randomUUID(),
+          userId: ctx.userId,
+          title: input?.title?.trim() || null,
+          content: input?.content ?? '',
+        },
+        select: {
+          id: true,
+          title: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      return note;
+    }),
+  updateContinuityNote: protectedcProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        title: z.string().max(200).nullable().optional(),
+        // Allow a generously larger body than `Note.content` — continuity
+        // notes are designed to grow over months as the user chains ideas
+        // together. The cap is still bounded to keep one runaway client
+        // from filling the table.
+        content: z.string().max(NOTE_MAX_LENGTH * 4).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (input.title === undefined && input.content === undefined) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Nothing to update',
+        });
+      }
+      const result = await prisma.continuityNote.updateMany({
+        where: { id: input.id, userId: ctx.userId },
+        data: {
+          ...(input.title !== undefined
+            ? { title: input.title?.trim() || null }
+            : {}),
+          ...(input.content !== undefined ? { content: input.content } : {}),
+        },
+      });
+      if (result.count === 0) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Note not found' });
+      }
+      return { ok: true };
+    }),
+  deleteContinuityNote: protectedcProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await prisma.continuityNote.deleteMany({
+        where: { id: input.id, userId: ctx.userId },
+      });
+      return { deleted: result.count };
+    }),
+  // Powers the rich-text editor's "Insert link" picker. Returns every
+  // curriculum / lesson / resource the current user owns in a single round
+  // trip so the picker can filter client-side as the user types.
+  listContinuityLinkSources: protectedcProcedure.query(async ({ ctx }) => {
+    const [curricula, lessons, resources] = await Promise.all([
+      prisma.curriculum.findMany({
+        where: { userId: ctx.userId },
+        select: { id: true, title: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      prisma.lesson.findMany({
+        where: { module: { curriculum: { userId: ctx.userId } } },
+        select: {
+          id: true,
+          title: true,
+          module: {
+            select: {
+              curriculumId: true,
+              curriculum: { select: { title: true } },
+            },
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      prisma.resource.findMany({
+        where: { userId: ctx.userId },
+        select: { id: true, title: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
+    ]);
+    return {
+      curricula,
+      lessons: lessons.map((l) => ({
+        id: l.id,
+        title: l.title,
+        curriculumId: l.module.curriculumId,
+        curriculumTitle: l.module.curriculum.title,
+      })),
+      resources,
+    };
+  }),
+
+  // ---------------------------------------------------------------------
   // Annotations (highlight + commentary on a lesson passage)
   // ---------------------------------------------------------------------
   listAnnotations: protectedcProcedure

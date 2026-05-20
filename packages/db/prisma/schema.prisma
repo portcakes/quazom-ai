@@ -78,6 +78,7 @@ model User {
   checkIns        CheckIn[]
   aiUsage         AiUsage[]
   resources       Resource[]
+  continuityNotes ContinuityNote[]
 
   @@unique([email])
   @@map("user")
@@ -444,6 +445,30 @@ model Note {
   @@index([curriculumId])
   @@index([resourceId])
   @@map("note")
+}
+
+// Long-form, source-spanning learner notebook. Unlike `Note`, a ContinuityNote
+// is *not* pinned to a single lesson/curriculum/resource — instead, links to
+// resources/lessons/courses are embedded directly in the rich-text body via
+// the editor's "Insert link" picker. The content column holds editor-emitted
+// HTML so we can round-trip styling (headings, colours, highlights, lists,
+// quotes, code) without parsing markdown back and forth.
+model ContinuityNote {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Optional title — UI shows "Untitled note" when blank so the user isn't
+  // forced to name a note before they start writing.
+  title     String?
+  // Rich-text body as HTML emitted by the TipTap editor. Stored verbatim so
+  // links/highlights/etc. survive a round trip; we never sanitise on read,
+  // only on write.
+  content   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("continuity_note")
 }
 
 // Five highlight colours the learner can pick from in the highlight toolbar.

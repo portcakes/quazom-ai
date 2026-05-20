@@ -12,6 +12,7 @@ import type { CurrentUser } from "@/lib/queries/user";
 import { UserMenu } from "./user-menu";
 import { CourseList } from "../course-list/course-list";
 import { CheckInButton } from "../schedule/check-in-button";
+import { ContinuityNotesSection } from "../continuity-notes/continuity-notes-section";
 
 type Props = {
   user: CurrentUser;
@@ -37,8 +38,9 @@ export default function AppSidebar({ user }: Props) {
         </Link>
       </SidebarHeader>
       <SidebarSeparator className="mx-0" />
-      <SidebarContent className="px-3 py-3">
+      <SidebarContent className="px-3 py-3 gap-4">
         <CourseList />
+        <ContinuityNotesSection />
       </SidebarContent>
       <SidebarSeparator className="mx-0" />
       {/* Check-in lives just above the user menu so the daily action is one
