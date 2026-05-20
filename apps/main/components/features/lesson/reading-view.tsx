@@ -8,6 +8,7 @@ import { Badge } from "@quazom-ai/ui/components/ui/badge";
 import { useTRPC } from "@/trpc/client";
 import type { LessonDetail } from "@/lib/queries/lesson";
 import { AnnotatedMarkdown } from "@/components/features/notes/annotated-markdown";
+import { SpeakTextButton } from "@/components/shared/speak-text-button";
 import { Highlightable } from "./highlightable";
 import { LessonNotesPanel } from "./lesson-notes-panel";
 
@@ -41,7 +42,10 @@ export function ReadingView({ lesson }: Props) {
       <div className="flex flex-col gap-8">
         {reading.overview ? (
           <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
-            <h2 className="font-heading text-lg font-semibold">Overview</h2>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="font-heading text-lg font-semibold">Overview</h2>
+              <SpeakTextButton text={reading.overview} />
+            </div>
             <AnnotatedMarkdown
               compact
               className="text-muted-foreground"
@@ -52,7 +56,12 @@ export function ReadingView({ lesson }: Props) {
           </section>
         ) : null}
 
-        <article className="max-w-none">
+        <article className="flex max-w-none flex-col gap-3">
+          <SpeakTextButton
+            text={reading.content}
+            label="Speak reading"
+            className="self-start"
+          />
           <AnnotatedMarkdown annotations={annotations}>
             {reading.content}
           </AnnotatedMarkdown>

@@ -824,6 +824,7 @@ enum AiUsageKind {
   DISCUSSION_REPLY
   SUBMISSION_FEEDBACK
   NOTE_SUMMARY
+  TTS
 }
 
 // Token-usage telemetry for every server-side AI call we make on behalf of

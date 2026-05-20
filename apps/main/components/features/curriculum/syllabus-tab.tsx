@@ -6,6 +6,7 @@ import type {
   CurriculumObjective,
   CurriculumResource,
 } from "@/inngest/schemas";
+import { SpeakTextButton } from "@/components/shared/speak-text-button";
 
 type Props = {
   objectives: CurriculumObjective[];
@@ -15,14 +16,33 @@ type Props = {
 export function SyllabusTab({ objectives, resources }: Props) {
   const orderedObjectives = [...objectives].sort((a, b) => a.order - b.order);
 
+  // Flatten the ordered objectives into a single passage so the TTS
+  // button reads the whole list as one cohesive narration. Numbering is
+  // spelled out so Gemini doesn't read each digit as a separate token.
+  const objectivesSpeech = orderedObjectives
+    .map(
+      (objective) =>
+        `Objective ${objective.order}. ${objective.title}. ${objective.description}`,
+    )
+    .join("\n\n");
+
   return (
     <div className="flex flex-col gap-10">
       <div className="flex flex-col gap-4">
-        <header>
-          <h2 className="font-heading text-2xl font-semibold">Course Objectives</h2>
-          <p className="text-sm text-muted-foreground">
-            What you&apos;ll be able to do by the end of this curriculum.
-          </p>
+        <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="font-heading text-2xl font-semibold">Course Objectives</h2>
+            <p className="text-sm text-muted-foreground">
+              What you&apos;ll be able to do by the end of this curriculum.
+            </p>
+          </div>
+          {orderedObjectives.length > 0 ? (
+            <SpeakTextButton
+              text={objectivesSpeech}
+              label="Speak objectives"
+              className="self-start sm:self-auto"
+            />
+          ) : null}
         </header>
         {orderedObjectives.length === 0 ? (
           <p className="text-sm text-muted-foreground">No objectives listed.</p>

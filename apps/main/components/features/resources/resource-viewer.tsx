@@ -46,6 +46,7 @@ import type {
 } from "@/inngest/schemas";
 import { AnnotatedMarkdown } from "../notes/annotated-markdown";
 import { Highlightable } from "../lesson/highlightable";
+import { SpeakTextButton } from "@/components/shared/speak-text-button";
 import { ResourceNotesPanel } from "./resource-notes-panel";
 
 export type ResourceViewData = {
@@ -371,7 +372,12 @@ export function ResourceViewer({ initial }: Props) {
           <TabsContent value="reader" className="min-w-0">
             {hasReaderContent ? (
               <Highlightable target={{ kind: "resource", resourceId: data.id }}>
-                <article className="max-w-none">
+                <article className="flex max-w-none flex-col gap-3">
+                  <SpeakTextButton
+                    text={data.content ?? ""}
+                    label="Speak text"
+                    className="self-start"
+                  />
                   <AnnotatedMarkdown annotations={annotations}>
                     {data.content ?? ""}
                   </AnnotatedMarkdown>

@@ -25,6 +25,7 @@ import {
   AnnotatedMarkdown,
   type AnnotationForRender,
 } from "@/components/features/notes/annotated-markdown";
+import { SpeakTextButton } from "@/components/shared/speak-text-button";
 import { Highlightable } from "./highlightable";
 import { LessonNotesPanel } from "./lesson-notes-panel";
 
@@ -114,7 +115,10 @@ function AssessmentReading({
     <>
       {hasOverview ? (
         <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
-          <h2 className="font-heading text-lg font-semibold">Overview</h2>
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="font-heading text-lg font-semibold">Overview</h2>
+            <SpeakTextButton text={data.overview} />
+          </div>
           <AnnotatedMarkdown
             compact
             className="text-muted-foreground"
@@ -125,7 +129,12 @@ function AssessmentReading({
         </section>
       ) : null}
       {hasContent ? (
-        <article className="max-w-none">
+        <article className="flex max-w-none flex-col gap-3">
+          <SpeakTextButton
+            text={data.content}
+            label="Speak reading"
+            className="self-start"
+          />
           <AnnotatedMarkdown annotations={annotations}>
             {data.content}
           </AnnotatedMarkdown>

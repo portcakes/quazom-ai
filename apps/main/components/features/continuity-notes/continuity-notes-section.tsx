@@ -43,7 +43,7 @@ export function ContinuityNotesSection() {
             type="button"
             onClick={handleCreate}
             disabled={creating}
-            className="flex w-full items-center gap-2 rounded-lg border border-dashed border-sidebar-border bg-transparent px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:border-sidebar-accent disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex w-full items-center gap-2 rounded-lg border border-dashed border-sidebar-border bg-transparent px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:border-sidebar-accent disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
           >
             {creating ? (
               <Loader2Icon className="size-4 shrink-0 animate-spin" />
@@ -64,7 +64,7 @@ export function ContinuityNotesSection() {
                 type="button"
                 onClick={() => handleOpen(note.id)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-lg bg-card px-3 py-2 text-left text-sm ring-1 ring-foreground/10 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  "flex w-full items-center gap-2 rounded-lg bg-card px-3 py-2 text-left text-sm ring-1 ring-foreground/10 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer",
                   isActive &&
                     "bg-sidebar-accent text-sidebar-accent-foreground ring-foreground/20",
                 )}

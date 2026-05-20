@@ -6,6 +6,7 @@ import { Badge } from "@quazom-ai/ui/components/ui/badge";
 import { Progress } from "@quazom-ai/ui/components/ui/progress";
 import { cn } from "@quazom-ai/ui/lib/utils";
 import type { CurriculumProgress } from "@/lib/queries/curriculum";
+import { SpeakTextButton } from "@/components/shared/speak-text-button";
 
 type Props = {
   title: string;
@@ -97,6 +98,13 @@ export function CurriculumHero({
           <p className="max-w-3xl text-base leading-relaxed text-muted-foreground sm:text-lg">
             {overview}
           </p>
+          {overview ? (
+            <SpeakTextButton
+              text={overview}
+              label="Speak overview"
+              className="self-start"
+            />
+          ) : null}
           {progress.totalLessonCount > 0 ? (
             <div className="flex max-w-3xl flex-col gap-1.5 pt-1">
               <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">

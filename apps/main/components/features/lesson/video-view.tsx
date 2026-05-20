@@ -8,6 +8,7 @@ import { Badge } from "@quazom-ai/ui/components/ui/badge";
 import { useTRPC } from "@/trpc/client";
 import type { LessonDetail } from "@/lib/queries/lesson";
 import { Markdown } from "@/components/shared/markdown";
+import { SpeakTextButton } from "@/components/shared/speak-text-button";
 import { Highlightable } from "./highlightable";
 import { LessonNotesPanel } from "./lesson-notes-panel";
 
@@ -53,7 +54,10 @@ export function VideoView({ lesson }: Props) {
     <div className="flex flex-col gap-8">
       {video.overview ? (
         <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
-          <h2 className="font-heading text-lg font-semibold">Overview</h2>
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="font-heading text-lg font-semibold">Overview</h2>
+            <SpeakTextButton text={video.overview} />
+          </div>
           <Markdown compact className="text-muted-foreground">
             {video.overview}
           </Markdown>
