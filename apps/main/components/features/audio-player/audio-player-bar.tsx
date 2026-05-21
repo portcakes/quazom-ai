@@ -706,7 +706,7 @@ function PlaylistMenu({
         </div>
         {playlist.length === 0 ? (
           <p className="py-2 text-xs text-muted-foreground">
-            Add audios to build a queue. Click the speaker icon next to any
+            Add audios to build a queue. Click the <ListPlusIcon className="size-3.5 inline-block" /> icon next to any
             generated audio in your library to add it here.
           </p>
         ) : (
