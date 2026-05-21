@@ -257,6 +257,34 @@ export async function deleteObject(key: string): Promise<void> {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
 
+/**
+ * Server-to-R2 upload — used when the bytes are produced server-side and we
+ * never want them to transit the client. The TTS pipeline takes this path:
+ * Gemini hands us PCM, we wrap it in a WAV header in-process, then PUT to
+ * R2 directly without minting a signed upload URL.
+ *
+ * `body` accepts either `Buffer` or `Uint8Array`; both serialise to a
+ * Node `Readable` under the hood. ContentLength must match the buffer
+ * length so R2's S3 layer accepts the request.
+ */
+export async function putObject(opts: {
+  key: string;
+  body: Buffer | Uint8Array;
+  contentType: string;
+}): Promise<void> {
+  const { bucket } = readConfig();
+  const client = getClient();
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: opts.key,
+      Body: opts.body,
+      ContentType: opts.contentType,
+      ContentLength: opts.body.byteLength,
+    }),
+  );
+}
+
 function escapeDispositionFilename(name: string): string {
   // RFC 6266 leaves us with a simple "strip backslashes / quotes" job for
   // the legacy `filename=` form. We'll never exceed the basic ASCII set

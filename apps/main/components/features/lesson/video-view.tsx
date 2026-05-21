@@ -56,7 +56,15 @@ export function VideoView({ lesson }: Props) {
         <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
           <div className="flex items-start justify-between gap-3">
             <h2 className="font-heading text-lg font-semibold">Overview</h2>
-            <SpeakTextButton text={video.overview} />
+            <SpeakTextButton
+              text={video.overview}
+              source={{
+                kind: "lesson-video-overview",
+                lessonId: lesson.id,
+                lessonTitle: lesson.title,
+                curriculumId: lesson.module.curriculum.id,
+              }}
+            />
           </div>
           <Markdown compact className="text-muted-foreground">
             {video.overview}

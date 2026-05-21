@@ -2179,6 +2179,222 @@ export const appRouter = createTRPCRouter({
     }),
 
   // ---------------------------------------------------------------------
+  // Generated audio library + playback queue
+  // ---------------------------------------------------------------------
+  //
+  // The audio bar reads from these procedures to populate its library
+  // dropdown and the user's playback queue. Generation itself doesn't go
+  // through tRPC — the `/api/tts` route handler returns the audio
+  // metadata directly so the player can start playback before the next
+  // queryClient.invalidateQueries() round-trip completes.
+  listGeneratedAudios: protectedcProcedure.query(async ({ ctx }) => {
+    return prisma.generatedAudio.findMany({
+      where: { userId: ctx.userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        section: true,
+        sourceKind: true,
+        lessonId: true,
+        curriculumId: true,
+        resourceId: true,
+        audioBytes: true,
+        durationSeconds: true,
+        characterCount: true,
+        truncated: true,
+        voice: true,
+        createdAt: true,
+      },
+    });
+  }),
+
+  deleteGeneratedAudio: activeUserProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const audio = await prisma.generatedAudio.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: { id: true, audioKey: true },
+      });
+      if (!audio) return { deleted: 0 };
+      // Best-effort R2 cleanup; never block the DB delete on a 404 in
+      // storage (the row is still authoritative for the UI).
+      if (audio.audioKey && r2IsConfigured()) {
+        try {
+          await r2DeleteObject(audio.audioKey);
+        } catch (err) {
+          console.warn('Failed to delete R2 audio object', err);
+        }
+      }
+      const result = await prisma.generatedAudio.deleteMany({
+        where: { id: audio.id, userId: ctx.userId },
+      });
+      return { deleted: result.count };
+    }),
+
+  // Single user-scoped queue. We return the joined audio rows in
+  // playback order so the bar's "Up next" view doesn't need a second
+  // round-trip per item.
+  getAudioPlaylist: protectedcProcedure.query(async ({ ctx }) => {
+    const items = await prisma.audioPlaylistItem.findMany({
+      where: { userId: ctx.userId },
+      orderBy: { position: 'asc' },
+      include: {
+        audio: {
+          select: {
+            id: true,
+            title: true,
+            section: true,
+            sourceKind: true,
+            lessonId: true,
+            curriculumId: true,
+            resourceId: true,
+            audioBytes: true,
+            durationSeconds: true,
+            characterCount: true,
+            truncated: true,
+            voice: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+    return items.map((item) => ({
+      id: item.id,
+      position: item.position,
+      audio: item.audio,
+    }));
+  }),
+
+  addToAudioPlaylist: activeUserProcedure
+    .input(z.object({ audioId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      // Defensive ownership check before we touch the queue.
+      const audio = await prisma.generatedAudio.findFirst({
+        where: { id: input.audioId, userId: ctx.userId },
+        select: { id: true },
+      });
+      if (!audio) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Audio not found',
+        });
+      }
+      // Idempotent: re-adding an audio just no-ops because of the unique
+      // index on (userId, audioId). We compute the next position
+      // outside of an INSERT-ON-CONFLICT because Prisma's `upsert` can't
+      // skip a partial update cleanly.
+      const existing = await prisma.audioPlaylistItem.findUnique({
+        where: {
+          userId_audioId: { userId: ctx.userId, audioId: audio.id },
+        },
+        select: { id: true, position: true },
+      });
+      if (existing) {
+        return { id: existing.id, position: existing.position };
+      }
+      const last = await prisma.audioPlaylistItem.findFirst({
+        where: { userId: ctx.userId },
+        orderBy: { position: 'desc' },
+        select: { position: true },
+      });
+      const nextPos = (last?.position ?? -1) + 1;
+      const created = await prisma.audioPlaylistItem.create({
+        data: {
+          id: crypto.randomUUID(),
+          userId: ctx.userId,
+          audioId: audio.id,
+          position: nextPos,
+        },
+        select: { id: true, position: true },
+      });
+      return created;
+    }),
+
+  removeFromAudioPlaylist: activeUserProcedure
+    .input(z.object({ audioId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      // Use a transaction so the "delete + re-pack positions" step is
+      // atomic — otherwise an interleaved add/remove can create gaps
+      // that we'd then read past in the player.
+      await prisma.$transaction(async (tx) => {
+        await tx.audioPlaylistItem.deleteMany({
+          where: { userId: ctx.userId, audioId: input.audioId },
+        });
+        const remaining = await tx.audioPlaylistItem.findMany({
+          where: { userId: ctx.userId },
+          orderBy: { position: 'asc' },
+          select: { id: true, position: true },
+        });
+        await Promise.all(
+          remaining.map((row, index) =>
+            row.position === index
+              ? Promise.resolve()
+              : tx.audioPlaylistItem.update({
+                  where: { id: row.id },
+                  data: { position: index },
+                }),
+          ),
+        );
+      });
+      return { ok: true };
+    }),
+
+  reorderAudioPlaylist: activeUserProcedure
+    .input(
+      z.object({
+        // Full ordered list of audio ids the client wants the queue to
+        // be in. We accept the whole list (rather than a from/to index
+        // pair) so the server stays the source of truth and the bar's
+        // optimistic reorder ends up converging.
+        audioIds: z.array(z.string()).max(500),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await prisma.$transaction(async (tx) => {
+        const owned = await tx.audioPlaylistItem.findMany({
+          where: { userId: ctx.userId },
+          select: { audioId: true },
+        });
+        const ownedSet = new Set(owned.map((row) => row.audioId));
+        // Drop ids the client shouldn't have known about — never trust
+        // the order list beyond the user's actual queue contents.
+        const dedup = new Set<string>();
+        const next: string[] = [];
+        for (const id of input.audioIds) {
+          if (!ownedSet.has(id)) continue;
+          if (dedup.has(id)) continue;
+          dedup.add(id);
+          next.push(id);
+        }
+        // Anything in the queue but missing from the new list keeps its
+        // relative order at the tail. Belt-and-braces against the
+        // client sending a stale list during an in-flight add.
+        for (const id of ownedSet) {
+          if (!dedup.has(id)) next.push(id);
+        }
+        await Promise.all(
+          next.map((audioId, index) =>
+            tx.audioPlaylistItem.update({
+              where: {
+                userId_audioId: { userId: ctx.userId, audioId },
+              },
+              data: { position: index },
+            }),
+          ),
+        );
+      });
+      return { ok: true };
+    }),
+
+  clearAudioPlaylist: activeUserProcedure.mutation(async ({ ctx }) => {
+    await prisma.audioPlaylistItem.deleteMany({
+      where: { userId: ctx.userId },
+    });
+    return { ok: true };
+  }),
+
+  // ---------------------------------------------------------------------
   // Study schedule
   // ---------------------------------------------------------------------
   previewSchedule: protectedcProcedure

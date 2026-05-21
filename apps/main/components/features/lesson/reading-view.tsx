@@ -44,7 +44,15 @@ export function ReadingView({ lesson }: Props) {
           <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
             <div className="flex items-start justify-between gap-3">
               <h2 className="font-heading text-lg font-semibold">Overview</h2>
-              <SpeakTextButton text={reading.overview} />
+              <SpeakTextButton
+                text={reading.overview}
+                source={{
+                  kind: "lesson-overview",
+                  lessonId: lesson.id,
+                  lessonTitle: lesson.title,
+                  curriculumId: lesson.module.curriculum.id,
+                }}
+              />
             </div>
             <AnnotatedMarkdown
               compact
@@ -61,6 +69,12 @@ export function ReadingView({ lesson }: Props) {
             text={reading.content}
             label="Speak reading"
             className="self-start"
+            source={{
+              kind: "lesson-reading",
+              lessonId: lesson.id,
+              lessonTitle: lesson.title,
+              curriculumId: lesson.module.curriculum.id,
+            }}
           />
           <AnnotatedMarkdown annotations={annotations}>
             {reading.content}

@@ -79,6 +79,8 @@ model User {
   aiUsage         AiUsage[]
   resources       Resource[]
   continuityNotes ContinuityNote[]
+  generatedAudios GeneratedAudio[]
+  audioPlaylist   AudioPlaylistItem[]
 
   @@unique([email])
   @@map("user")
@@ -158,6 +160,7 @@ model Curriculum {
   // above is a separate concept — those are model suggestions surfaced in
   // the Resources tab alongside this list of learner-owned resources.
   resourceLinks        ResourceCurriculum[]
+  generatedAudios      GeneratedAudio[]
 
   @@index([userId])
   @@map("curriculum")
@@ -234,6 +237,7 @@ model Lesson {
   // pinned to this lesson. Distinct from `recommendedResources` above, which
   // is the AI's suggestion list.
   resourceLinks        ResourceLesson[]
+  generatedAudios      GeneratedAudio[]
   // Sessions reference lessons indirectly through StudySession.lessonIds (Json),
   // not a relational FK, so we don't list them here.
 
@@ -597,6 +601,7 @@ model Resource {
   lessonLinks     ResourceLesson[]
   notes           Note[]
   annotations     Annotation[]
+  generatedAudios GeneratedAudio[]
 
   @@index([userId])
   @@index([userId, kind])
@@ -852,4 +857,92 @@ model AiUsage {
   @@index([kind])
   @@index([createdAt])
   @@map("ai_usage")
+}
+
+// What surface a generated audio was created for. Drives both the title
+// display ("Lesson Title - Overview") and the icon shown in the audio
+// library list. Adding a new value here is a breaking enum change and
+// requires a migration.
+enum AudioSourceKind {
+  LESSON_OVERVIEW
+  LESSON_READING
+  LESSON_VIDEO_OVERVIEW
+  LESSON_QUIZ_OVERVIEW
+  LESSON_QUIZ_READING
+  RESOURCE_READER
+  CURRICULUM_OVERVIEW
+  COURSE_OBJECTIVES
+  GENERIC
+}
+
+// One synthesised TTS audio clip, persisted to R2 so the user never has
+// to wait for re-generation. We dedupe on `(userId, contextKey)` where
+// `contextKey` is a SHA-256 of the cleaned passage + voice + model — a
+// click on the same Speak Text button always returns the existing row.
+model GeneratedAudio {
+  id              String              @id
+  userId          String
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Stable hash of (cleaned text, voice, model). Re-generating with the
+  // same parameters maps to the same clip.
+  contextKey      String
+  voice           String              @default("Kore")
+  model           String
+  // Source metadata. The FKs are SetNull so a deleted lesson/resource
+  // doesn't drop the user's audio library; the cached `title` / `section`
+  // fields still let the bar render something useful.
+  sourceKind      AudioSourceKind
+  lessonId        String?
+  lesson          Lesson?             @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  curriculumId    String?
+  curriculum      Curriculum?         @relation(fields: [curriculumId], references: [id], onDelete: SetNull)
+  resourceId      String?
+  resource        Resource?           @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  // Frozen display strings so a renamed lesson doesn't retroactively
+  // re-title an existing audio (and vice versa for deletes).
+  title           String
+  section         String?
+  // R2 storage. `audioKey` is `users/{userId}/audio/{audioId}.wav`.
+  audioKey        String
+  audioMimeType   String              @default("audio/wav")
+  audioBytes      Int
+  // Duration is best-effort: derived from the PCM byte length we get
+  // back from Gemini, so it's accurate to within a sample. NULL if the
+  // calculation fails for any reason.
+  durationSeconds Float?
+  // Bookkeeping for the library UI.
+  characterCount  Int
+  truncated       Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  playlistItems   AudioPlaylistItem[]
+
+  @@unique([userId, contextKey])
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([userId, lessonId])
+  @@index([userId, curriculumId])
+  @@index([userId, resourceId])
+  @@map("generated_audio")
+}
+
+// Single user-scoped playback queue. Items are a many-to-one onto
+// GeneratedAudio (the audio itself owns the bytes); this table only
+// captures position. Position is dense (0,1,2…) and rewritten on each
+// reorder; the unique index on (userId, audioId) keeps a clip from
+// appearing twice in the same queue.
+model AudioPlaylistItem {
+  id        String         @id
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audioId   String
+  audio     GeneratedAudio @relation(fields: [audioId], references: [id], onDelete: Cascade)
+  // 0-indexed order. Rewritten in bulk on reorder/remove so gaps never
+  // accumulate.
+  position  Int
+  addedAt   DateTime       @default(now())
+
+  @@unique([userId, audioId])
+  @@index([userId, position])
+  @@map("audio_playlist_item")
 }

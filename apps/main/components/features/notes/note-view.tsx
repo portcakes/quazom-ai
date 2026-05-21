@@ -178,8 +178,13 @@ export function NoteView({ initialNote }: Props) {
 
   return (
     <div className="flex min-w-0 flex-col">
-      {/* Sticky compact header — appears once the user scrolls past the hero. */}
-      <div className="sticky top-12 z-20 h-0 md:top-0">
+      {/* Sticky compact header — appears once the user scrolls past the hero.
+          `top` includes the audio player bar's height (published as
+          `--audio-bar-offset` while the bar is visible) so the two
+          stack instead of overlap. */}
+      <div
+        className="sticky top-[calc(3rem_+_var(--audio-bar-offset,0px))] z-20 h-0 md:top-[var(--audio-bar-offset,0px)]"
+      >
         <div
           aria-hidden={!collapsed}
           className={cn(

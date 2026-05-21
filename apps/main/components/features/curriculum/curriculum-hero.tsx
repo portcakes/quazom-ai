@@ -9,6 +9,7 @@ import type { CurriculumProgress } from "@/lib/queries/curriculum";
 import { SpeakTextButton } from "@/components/shared/speak-text-button";
 
 type Props = {
+  curriculumId: string;
   title: string;
   overview: string;
   estimatedDuration: string;
@@ -23,6 +24,7 @@ type Props = {
 const COLLAPSE_TRIGGER_PX = 96;
 
 export function CurriculumHero({
+  curriculumId,
   title,
   overview,
   estimatedDuration,
@@ -54,8 +56,13 @@ export function CurriculumHero({
           never adds vertical space at the top of the page. Because this is
           `sticky` (not `fixed`) it stays inside the parent's content box,
           which means it correctly respects the inline desktop sidebar
-          bounds instead of overlapping it. */}
-      <div className="sticky top-12 z-20 h-0 md:top-0">
+          bounds instead of overlapping it. The `top` offset adds the
+          audio player bar's height (published as the
+          `--audio-bar-offset` CSS variable while it's visible) so the
+          compact bar slots in below the audio bar. */}
+      <div
+        className="sticky top-[calc(3rem_+_var(--audio-bar-offset,0px))] z-20 h-0 md:top-[var(--audio-bar-offset,0px)]"
+      >
         <div
           aria-hidden={!collapsed}
           className={cn(
@@ -103,6 +110,11 @@ export function CurriculumHero({
               text={overview}
               label="Speak overview"
               className="self-start"
+              source={{
+                kind: "curriculum-overview",
+                curriculumId,
+                curriculumTitle: title,
+              }}
             />
           ) : null}
           {progress.totalLessonCount > 0 ? (

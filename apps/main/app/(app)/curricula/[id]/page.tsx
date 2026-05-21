@@ -24,6 +24,7 @@ export default async function CurriculumPage({ params }: { params: Params }) {
   return (
     <div className="flex min-w-0 flex-col">
       <CurriculumHero
+        curriculumId={curriculum.id}
         title={curriculum.title}
         overview={curriculum.overview}
         estimatedDuration={curriculum.estimatedDuration}

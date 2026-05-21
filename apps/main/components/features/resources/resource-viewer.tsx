@@ -377,6 +377,11 @@ export function ResourceViewer({ initial }: Props) {
                     text={data.content ?? ""}
                     label="Speak text"
                     className="self-start"
+                    source={{
+                      kind: "resource-reader",
+                      resourceId: data.id,
+                      resourceTitle: data.title,
+                    }}
                   />
                   <AnnotatedMarkdown annotations={annotations}>
                     {data.content ?? ""}

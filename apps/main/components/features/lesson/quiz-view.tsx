@@ -84,7 +84,13 @@ function AssessmentBody({
           </p>
         ) : null}
 
-        <AssessmentReading data={data} annotations={annotations} />
+        <AssessmentReading
+          data={data}
+          annotations={annotations}
+          lessonId={lesson.id}
+          lessonTitle={lesson.title}
+          curriculumId={lesson.module.curriculum.id}
+        />
 
         {data.recommendedResources.length > 0 ? (
           <StudyMaterial resources={data.recommendedResources} />
@@ -104,9 +110,15 @@ function AssessmentBody({
 function AssessmentReading({
   data,
   annotations,
+  lessonId,
+  lessonTitle,
+  curriculumId,
 }: {
   data: QuizDataLike;
   annotations: AnnotationForRender[];
+  lessonId: string;
+  lessonTitle: string;
+  curriculumId: string;
 }) {
   const hasOverview = Boolean(data.overview);
   const hasContent = Boolean(data.content);
@@ -117,7 +129,15 @@ function AssessmentReading({
         <section className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-5">
           <div className="flex items-start justify-between gap-3">
             <h2 className="font-heading text-lg font-semibold">Overview</h2>
-            <SpeakTextButton text={data.overview} />
+            <SpeakTextButton
+              text={data.overview}
+              source={{
+                kind: "lesson-quiz-overview",
+                lessonId,
+                lessonTitle,
+                curriculumId,
+              }}
+            />
           </div>
           <AnnotatedMarkdown
             compact
@@ -134,6 +154,12 @@ function AssessmentReading({
             text={data.content}
             label="Speak reading"
             className="self-start"
+            source={{
+              kind: "lesson-quiz-reading",
+              lessonId,
+              lessonTitle,
+              curriculumId,
+            }}
           />
           <AnnotatedMarkdown annotations={annotations}>
             {data.content}

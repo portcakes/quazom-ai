@@ -9,11 +9,18 @@ import type {
 import { SpeakTextButton } from "@/components/shared/speak-text-button";
 
 type Props = {
+  curriculumId: string;
+  curriculumTitle: string;
   objectives: CurriculumObjective[];
   resources: CurriculumResource[];
 };
 
-export function SyllabusTab({ objectives, resources }: Props) {
+export function SyllabusTab({
+  curriculumId,
+  curriculumTitle,
+  objectives,
+  resources,
+}: Props) {
   const orderedObjectives = [...objectives].sort((a, b) => a.order - b.order);
 
   // Flatten the ordered objectives into a single passage so the TTS
@@ -41,6 +48,11 @@ export function SyllabusTab({ objectives, resources }: Props) {
               text={objectivesSpeech}
               label="Speak objectives"
               className="self-start sm:self-auto"
+              source={{
+                kind: "course-objectives",
+                curriculumId,
+                curriculumTitle,
+              }}
             />
           ) : null}
         </header>

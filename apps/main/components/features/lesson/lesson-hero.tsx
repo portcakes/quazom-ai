@@ -46,8 +46,13 @@ export function LessonHero({ lesson }: Props) {
   return (
     <>
       {/* Sticky compact header — appears on scroll, mirroring the curriculum
-          page chrome. Holds the title plus a quick "Create Note" action. */}
-      <div className="sticky top-12 z-20 h-0 md:top-0">
+          page chrome. Holds the title plus a quick "Create Note" action.
+          `top` adds the audio player bar's height (published as the
+          `--audio-bar-offset` CSS variable when visible) so the compact
+          bar slots in below the audio bar instead of being painted over. */}
+      <div
+        className="sticky top-[calc(3rem_+_var(--audio-bar-offset,0px))] z-20 h-0 md:top-[var(--audio-bar-offset,0px)]"
+      >
         <div
           aria-hidden={!collapsed}
           className={cn(

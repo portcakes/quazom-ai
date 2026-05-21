@@ -53,9 +53,12 @@ export function ContinuityNotePanel() {
         // title input, and editor toolbar remain visible while the page on
         // the left continues to scroll. `self-start` opts the panel out of
         // the flex container's default stretch so its height is exactly
-        // the viewport (h-svh) rather than the parent's full height —
-        // sticky positioning requires a constrained height to "stick".
-        "md:sticky md:top-0 md:z-auto md:h-svh md:self-start md:w-[480px] md:shrink-0 md:border-l md:border-border",
+        // the viewport (minus the audio player bar when it's visible)
+        // rather than the parent's full height — sticky positioning
+        // requires a constrained height to "stick". The `top` and
+        // `height` math both pull from `--audio-bar-offset` so the
+        // panel slots in below the bar instead of being painted over.
+        "md:sticky md:top-[var(--audio-bar-offset,0px)] md:z-auto md:h-[calc(100svh_-_var(--audio-bar-offset,0px))] md:self-start md:w-[480px] md:shrink-0 md:border-l md:border-border",
       )}
       aria-label="Continuity Note editor"
     >

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
 /**
  * Wrapper around the Gemini TTS REST API. The `@ai-sdk/google` provider we
  * use elsewhere doesn't yet expose audio-out, so we hit the
@@ -39,6 +41,10 @@ export type GenerateSpeechResult = {
   truncated: boolean;
   /** Char count we actually sent to the API after cleaning + truncating. */
   spokenChars: number;
+  /** Length of the rendered audio in seconds, derived from the PCM body
+   *  size. Best-effort — `null` if the response didn't carry PCM data we
+   *  could measure. */
+  durationSeconds: number | null;
   /** Raw token usage from the model response (best-effort; preview API can
    *  omit fields). Used for `recordAiUsage`. */
   usage: {
@@ -50,6 +56,25 @@ export type GenerateSpeechResult = {
    *  bump the constant later. */
   model: string;
 };
+
+/**
+ * Compute the dedup key for a (text, voice, model) tuple. Stable across
+ * processes — we use it to look up an existing GeneratedAudio row before
+ * spending another model call. The cleaned text goes through
+ * {@link stripMarkdownForSpeech} first so identical passages with
+ * different surrounding markdown still hash to the same key.
+ */
+export function ttsContextKey(opts: {
+  text: string;
+  voice?: string;
+}): string {
+  const cleaned = stripMarkdownForSpeech(opts.text);
+  const truncated = cleaned.slice(0, TTS_MAX_INPUT_CHARS);
+  const voice = opts.voice || DEFAULT_TTS_VOICE;
+  return createHash("sha256")
+    .update(`${TTS_MODEL}\u241F${voice}\u241F${truncated}`, "utf8")
+    .digest("hex");
+}
 
 type GeminiInlineData = {
   data?: string;
@@ -161,11 +186,17 @@ export async function generateSpeech({
     numChannels: NUM_CHANNELS,
   });
 
+  // PCM length / (sample rate * channels * bytes-per-sample) → seconds.
+  // For our 24kHz/16-bit/mono stream that's `pcm.length / (24000 * 2)`.
+  const bytesPerSecond = SAMPLE_RATE_HZ * NUM_CHANNELS * (SAMPLE_BITS / 8);
+  const durationSeconds = pcm.length > 0 ? pcm.length / bytesPerSecond : null;
+
   const usage = json.usageMetadata ?? {};
   return {
     wav,
     truncated,
     spokenChars: spoken.length,
+    durationSeconds,
     usage: {
       inputTokens: usage.promptTokenCount,
       outputTokens: usage.candidatesTokenCount,

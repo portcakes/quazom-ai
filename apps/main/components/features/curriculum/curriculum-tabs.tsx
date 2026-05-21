@@ -41,6 +41,12 @@ export function CurriculumTabs({
               - portrait mobile (<md): navbar h-12 + compact header h-12 = top-24
               - everywhere else: just the compact header h-12 = top-12
 
+            When the global audio player bar is visible (any page where the
+            user has clicked "Speak text"), `--audio-bar-offset` is the
+            bar's measured height; we add it on top of the existing offsets
+            so the tabs slot in below the audio bar instead of being
+            painted over.
+
             On narrow viewports the six tabs no longer fit in the strip's
             natural width. We solve this with a horizontal scroll container
             whose inner row uses `min-w-full w-fit` so that:
@@ -48,7 +54,7 @@ export function CurriculumTabs({
               - when they overflow, the user can swipe horizontally
             The scrollbar is hidden visually since the active-tab indicator
             already cues "swipe to see more". */}
-        <div className="sticky top-24 z-10 -mx-6 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:top-12">
+        <div className="sticky top-[calc(6rem_+_var(--audio-bar-offset,0px))] z-10 -mx-6 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:top-[calc(3rem_+_var(--audio-bar-offset,0px))]">
           <div className="overflow-x-auto px-6 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex w-fit min-w-full justify-center">
               <TabsList>
@@ -63,7 +69,12 @@ export function CurriculumTabs({
           </div>
         </div>
         <TabsContent value="syllabus" className="mt-6">
-          <SyllabusTab objectives={objectives} resources={resources} />
+          <SyllabusTab
+            curriculumId={id}
+            curriculumTitle={title}
+            objectives={objectives}
+            resources={resources}
+          />
         </TabsContent>
         <TabsContent value="modules" className="mt-6">
           <ModulesTab curriculumId={id} modules={modules} progress={progress} />

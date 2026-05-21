@@ -11,6 +11,8 @@ import { getUserContinuityNotes } from "@/lib/queries/continuity-notes";
 import { CourseListProvider } from "../course-list/course-list-provider";
 import { ContinuityNoteProvider } from "../continuity-notes/continuity-note-provider";
 import { ContinuityNotePanel } from "../continuity-notes/continuity-note-panel";
+import { AudioPlayerProvider } from "../audio-player/audio-player-provider";
+import { AudioPlayerBar } from "../audio-player/audio-player-bar";
 
 export default async function NavWrapper({ children }: { children: React.ReactNode }) {
     await requireAuth();
@@ -45,22 +47,32 @@ export default async function NavWrapper({ children }: { children: React.ReactNo
             initialTotalCount={totalCount}
         >
             <ContinuityNoteProvider initialNotes={initialContinuityNotes}>
-                <SidebarProvider>
-                    <AppSidebar user={user} />
-                    <SidebarInset>
-                        <Navbar />
-                        {/* Split-screen wrapper: the main page content
-                            shrinks to fit on the left while the
-                            ContinuityNotePanel claims a fixed-width
-                            column on the right when a note is open. */}
-                        <div className="flex flex-1 min-h-0 min-w-0">
-                            <div className="flex-1 min-w-0 flex flex-col">
-                                {children}
+                <AudioPlayerProvider>
+                    <SidebarProvider>
+                        <AppSidebar user={user} />
+                        <SidebarInset>
+                            <Navbar />
+                            {/* Audio player bar sits between the navbar
+                                and the main content. It's sticky inside
+                                the SidebarInset's scroll container so it
+                                tucks under the navbar as the user
+                                scrolls. The provider above keeps the
+                                <audio> element mounted across page
+                                navigations so playback never stops. */}
+                            <AudioPlayerBar />
+                            {/* Split-screen wrapper: the main page content
+                                shrinks to fit on the left while the
+                                ContinuityNotePanel claims a fixed-width
+                                column on the right when a note is open. */}
+                            <div className="flex flex-1 min-h-0 min-w-0">
+                                <div className="flex-1 min-w-0 flex flex-col">
+                                    {children}
+                                </div>
+                                <ContinuityNotePanel />
                             </div>
-                            <ContinuityNotePanel />
-                        </div>
-                    </SidebarInset>
-                </SidebarProvider>
+                        </SidebarInset>
+                    </SidebarProvider>
+                </AudioPlayerProvider>
             </ContinuityNoteProvider>
         </CourseListProvider>
     );
