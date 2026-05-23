@@ -3,13 +3,13 @@ import {
   CheckCircle2Icon,
   ClockIcon,
   HourglassIcon,
+  InfoIcon,
   MailIcon,
   SendIcon,
   XCircleIcon,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { StatCard } from "@/components/stat-card";
-import { SendAlphaInviteButton } from "@/components/send-alpha-invite-button";
 import { WaitlistFilterSelector } from "@/components/waitlist-filter-selector";
 import {
   getWaitlistOverview,
@@ -44,17 +44,28 @@ export default async function WaitlistPage({ searchParams }: PageProps) {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex flex-col gap-2">
             <h1 className="font-heading text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
-              Alpha invitations.
+              Waitlist archive.
             </h1>
             <p className="text-sm text-muted-foreground sm:text-base">
-              Everyone who&rsquo;s signed up for early access — and exactly
-              where each one is in the funnel. Send a fresh alpha code with a
-              single click; the button greys out once they&rsquo;ve made an
-              account.
+              Historical record of everyone who joined the closed-alpha
+              waitlist. Quazom is now in open alpha, so new signups bypass
+              this list entirely and create accounts directly.
             </p>
           </div>
         </div>
       </header>
+
+      <div
+        role="status"
+        className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200"
+      >
+        <InfoIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <p>
+          The waitlist is currently inactive. Quazom is in open alpha —
+          anyone can sign up directly at quazom.ai. The data below is kept
+          for reference; no new invites are being sent.
+        </p>
+      </div>
 
       <section
         aria-label="Waitlist KPIs"
@@ -115,15 +126,14 @@ export default async function WaitlistPage({ searchParams }: PageProps) {
                   <Th className="text-right">Invites</Th>
                   <Th className="text-right">Last invite</Th>
                   <Th className="text-right">Key expires</Th>
-                  <Th className="text-right">Joined</Th>
-                  <Th className="text-right pr-4">Action</Th>
+                  <Th className="text-right pr-4">Joined</Th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
                 {rows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={7}
                       className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
                       No waitlist members match this filter.
@@ -145,25 +155,6 @@ export default async function WaitlistPage({ searchParams }: PageProps) {
 
 function WaitlistTableRow({ row }: { row: WaitlistRow }) {
   const latest = row.latestInvite;
-
-  // Pick the right button variant from the enriched status. Centralising
-  // this here keeps the client component dumb — it just renders whatever
-  // we tell it.
-  let variant:
-    | "send"
-    | "resend"
-    | "pending"
-    | "has-account"
-    | "redeemed";
-  if (row.hasAccount) {
-    variant = "has-account";
-  } else if (latest?.redeemedAt) {
-    variant = "redeemed";
-  } else if (!latest || latest.expired || !latest.sentAt) {
-    variant = row.invitesSent === 0 ? "send" : "resend";
-  } else {
-    variant = "pending";
-  }
 
   return (
     <tr className="hover:bg-muted/40 transition-colors">
@@ -215,22 +206,13 @@ function WaitlistTableRow({ row }: { row: WaitlistRow }) {
           <span className="text-xs text-muted-foreground">—</span>
         )}
       </Td>
-      <Td className="text-right">
+      <Td className="text-right pr-4">
         <span
           title={row.joinedAt.toISOString()}
           className="whitespace-nowrap text-xs text-muted-foreground"
         >
           {formatDistanceToNow(row.joinedAt, { addSuffix: true })}
         </span>
-      </Td>
-      <Td className="text-right pr-4">
-        <div className="flex justify-end">
-          <SendAlphaInviteButton
-            waitlistEntryId={row.id}
-            email={row.email}
-            variant={variant}
-          />
-        </div>
       </Td>
     </tr>
   );

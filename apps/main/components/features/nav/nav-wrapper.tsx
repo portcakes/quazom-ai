@@ -38,6 +38,7 @@ export default async function NavWrapper({ children }: { children: React.ReactNo
     const initialContinuityNotes = continuityNotes.map((note) => ({
         id: note.id,
         title: note.title,
+        tags: note.tags ?? [],
         createdAt: note.createdAt.toISOString(),
         updatedAt: note.updatedAt.toISOString(),
     }));

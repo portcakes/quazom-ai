@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
-  ArrowRightIcon,
   CompassIcon,
   HeartHandshakeIcon,
   MailIcon,
@@ -11,7 +10,6 @@ import {
 } from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { WaitlistForm } from "@/components/waitlist/waitlist-form";
 import { PricingTiers } from "@/components/pricing/pricing-tiers";
 
 const MAIN_URL = process.env.NEXT_PUBLIC_MAIN_URL || "http://localhost:3001";
@@ -20,11 +18,11 @@ const SUPPORT_EMAIL = "hello@quazom.ai";
 export const metadata: Metadata = {
   title: "Pricing · Quazom",
   description:
-    "Quazom is free during the closed alpha. Founding Explorer and Founding Scholar plans unlock higher generation limits, future research tools, and a permanent founding-tier title beside your name.",
+    "Quazom is free to use during the open alpha. Founding Explorer and Founding Scholar plans unlock higher generation limits, future research tools, and a permanent founding-tier title beside your name.",
   openGraph: {
     title: "Pricing · Quazom",
     description:
-      "Free during alpha. Founding Explorer and Founding Scholar tiers unlock higher generation limits and a permanent founding title beside your name.",
+      "Free during the open alpha. Founding Explorer and Founding Scholar tiers unlock higher generation limits and a permanent founding title beside your name.",
     images: [{ url: "https://www.quazom.ai/og-image.png" }],
   },
 };
@@ -37,7 +35,7 @@ export default function PricingPage() {
         <HeroSection />
         <PlansSection />
         <PhilosophySection />
-        <ExpeditedAccessSection />
+        <QuestionsSection />
         <FaqSection />
         <BottomCtaSection />
       </main>
@@ -67,7 +65,7 @@ function SiteHeader() {
             <a href={`${MAIN_URL}/login`}>Sign in</a>
           </Button>
           <Button asChild size="sm" className="font-medium">
-            <Link href="/waitlist">Join waitlist</Link>
+            <a href={`${MAIN_URL}/register`}>Sign up</a>
           </Button>
         </nav>
       </div>
@@ -89,13 +87,14 @@ function HeroSection() {
           <span className="italic text-primary"> financially out of reach.</span>
         </h1>
         <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg md:text-xl">
-          Quazom is free during the closed alpha. When you&rsquo;re ready for
-          higher generation limits and a permanent founding-tier title beside
-          your name, choose the plan that matches the way you want to learn.
+          Quazom is free to use during the open alpha. When you&rsquo;re ready
+          for higher generation limits and a permanent founding-tier title
+          beside your name, choose the plan that matches the way you want to
+          learn.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
           <span className="rounded-full border border-border/70 bg-card px-3 py-1">
-            Free during alpha
+            Free during open alpha
           </span>
           <span className="rounded-full border border-border/70 bg-card px-3 py-1">
             Founding tiers · until July 7, 2026
@@ -118,7 +117,7 @@ function PlansSection() {
             Three ways to learn
           </span>
           <h2 className="font-heading max-w-3xl text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl md:text-5xl">
-            Start free. Upgrade when you outgrow the alpha caps.
+            Start free. Upgrade for higher limits and a Founding title.
           </h2>
           <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
             Founding Explorer and Founding Scholar are limited-time tiers. Pick
@@ -177,7 +176,7 @@ function PhilosophySection() {
   );
 }
 
-function ExpeditedAccessSection() {
+function QuestionsSection() {
   return (
     <section className="border-b border-border/60">
       <div className="mx-auto w-full max-w-4xl px-6 py-16 md:py-20">
@@ -185,36 +184,28 @@ function ExpeditedAccessSection() {
           <div className="flex flex-col gap-4 text-center">
             <span className="mx-auto inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-medium tracking-wide text-primary">
               <SparklesIcon className="size-3.5" />
-              Skip the line
+              Got questions?
             </span>
             <h2 className="font-heading text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
-              Want in faster?
+              We&rsquo;re a real team — talk to us.
             </h2>
             <p className="mx-auto max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              We expedite invites for people who tell us what they want to
-              learn. Already on the waitlist? <strong>Reply to your
-              waitlist confirmation email</strong> with a short note about your
-              first curriculum. Not on the list yet? Send us a quick email at{" "}
+              Curious about a plan, want to suggest a feature, or just need a
+              human to ping? Email us at{" "}
               <a
                 href={`mailto:${SUPPORT_EMAIL}`}
                 className="text-foreground underline underline-offset-2 hover:text-primary"
               >
                 {SUPPORT_EMAIL}
               </a>{" "}
-              and we&rsquo;ll bump you up.
+              and a real person will write back.
             </p>
             <div className="mt-2 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button asChild size="lg" className="font-medium">
-                <a href={`mailto:${SUPPORT_EMAIL}?subject=Expedited%20Quazom%20access`}>
+                <a href={`mailto:${SUPPORT_EMAIL}?subject=Quazom%20question`}>
                   <MailIcon className="size-4" />
                   Email {SUPPORT_EMAIL}
                 </a>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="font-medium">
-                <Link href="/waitlist">
-                  Join the waitlist
-                  <ArrowRightIcon className="size-4" />
-                </Link>
               </Button>
             </div>
           </div>
@@ -247,16 +238,18 @@ function FaqSection() {
           </p>
         </div>
         <dl className="flex flex-col divide-y divide-border/60">
-          <FaqItem question="Do I have to pay during the alpha?">
-            No. The Alpha tier is free. We won&rsquo;t ask for a card to sign
-            up, and the alpha caps (5 curricula total, 30 lessons per month, 10
-            discussions per month) reset automatically on the first of each
-            month.
+          <FaqItem question="Do I have to pay to use Quazom?">
+            No. The Open Alpha tier is free forever and includes the full core
+            platform with monthly generation limits (5 curricula total, 30
+            lessons per month, 10 discussion lessons per month, and 10 TTS
+            audio generations per month). Upgrade to Founding Explorer or
+            Founding Scholar for higher limits and a scholarly title beside
+            your name.
           </FaqItem>
           <FaqItem question="What is a &ldquo;Founding&rdquo; tier?">
             Founding Explorer and Founding Scholar are the same Explorer and
-            Scholar plans, available now during a limited window (through July
-            7, 2026 at midnight Eastern Time). Subscribing during this window
+            Scholar plans, available during a limited window (through July 7,
+            2026 at midnight Eastern Time). Subscribing during this window
             permanently unlocks the matching scholarly title—&ldquo;Founding
             Explorer&rdquo; or &ldquo;Founding Scholar&rdquo;—displayed beside
             your name inside the app.
@@ -268,9 +261,10 @@ function FaqSection() {
             display in your settings.
           </FaqItem>
           <FaqItem question="What counts toward my limits?">
-            Generations count, not reads. Creating a new curriculum or
-            generating a new lesson costs a slot; opening a curriculum or
-            re-reading a lesson is always free. Discussion lessons count toward
+            Generations count, not reads. Creating a new curriculum, generating
+            a new lesson, or spinning up a new TTS audio clip costs a slot;
+            opening a curriculum, re-reading a lesson, or replaying audio you
+            already generated is always free. Discussion lessons count toward
             both the lesson cap and a separate discussion cap.
           </FaqItem>
           <FaqItem question="Can I switch tiers later?">
@@ -278,12 +272,10 @@ function FaqSection() {
             Your curricula, notes, schedules, and progression are all yours and
             don&rsquo;t move when your plan does.
           </FaqItem>
-          <FaqItem question="When does pricing actually apply?">
-            Today the Alpha tier is the only active plan—new users join the
-            waitlist, get an invite, and use Quazom for free. The Founding
-            Explorer and Founding Scholar tiers become available the moment
-            paid subscriptions open up; everyone on the waitlist gets the
-            heads-up first.
+          <FaqItem question="When can I subscribe?">
+            Right now. The free Open Alpha tier and both Founding tiers are
+            live — you can sign up free and upgrade whenever you outgrow the
+            monthly limits.
           </FaqItem>
         </dl>
       </div>
@@ -303,23 +295,16 @@ function BottomCtaSection() {
           </span>
         </h2>
         <p className="max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-          Drop your name and email and we&rsquo;ll save you a seat in the alpha.
-          Reply to the confirmation email—or send us a note at{" "}
-          <a
-            className="underline underline-offset-2 hover:text-foreground"
-            href={`mailto:${SUPPORT_EMAIL}`}
-          >
-            {SUPPORT_EMAIL}
-          </a>
-          —to skip the line.
+          Sign up for free, generate your first curriculum, and only upgrade
+          when you outgrow the monthly limits.
         </p>
-        <div className="mt-2 w-full max-w-xl">
-          <WaitlistForm
-            source="pricing-page"
-            cta="Join the waitlist"
-            successTitle="You're on the list."
-            successBody="Thanks—reply to the confirmation email with what you want to learn and we'll bump you up the queue."
-          />
+        <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">
+          <Button asChild size="lg" className="font-medium">
+            <a href={`${MAIN_URL}/register`}>Start free</a>
+          </Button>
+          <Button asChild variant="ghost" size="lg">
+            <Link href="/">Back home</Link>
+          </Button>
         </div>
       </div>
     </section>

@@ -20,8 +20,7 @@ export default async function SettingsPage() {
             Settings
           </h1>
           <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">
-            Update your profile, see your alpha plan usage, and manage your
-            account.
+            Update your profile, see your plan usage, and manage your account.
           </p>
         </div>
       </section>

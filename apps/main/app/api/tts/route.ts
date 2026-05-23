@@ -3,9 +3,18 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import {
   AUDIO_MAX_INPUT_CHARS,
-  generateOrFetchAudio,
+  findExistingAudio,
+  generateAndPersistAudio,
   type AudioSourceInput,
+  type GeneratedAudioSummary,
 } from "@/lib/queries/audio";
+import {
+  countTtsGenerationsThisMonth,
+  isOverLimit,
+  LIMITS_BY_PLAN,
+  resolveEffectivePlan,
+} from "@/lib/subscription/plan-limits";
+import prisma from "@quazom-ai/db";
 
 // TTS generation is dynamic on every request and can't be cached.
 export const dynamic = "force-dynamic";
@@ -42,6 +51,25 @@ const requestSchema = z.object({
   source: sourceSchema,
 });
 
+function serializeAudio(audio: GeneratedAudioSummary) {
+  return {
+    id: audio.id,
+    title: audio.title,
+    section: audio.section,
+    sourceKind: audio.sourceKind,
+    lessonId: audio.lessonId,
+    curriculumId: audio.curriculumId,
+    resourceId: audio.resourceId,
+    audioBytes: audio.audioBytes,
+    durationSeconds: audio.durationSeconds,
+    characterCount: audio.characterCount,
+    truncated: audio.truncated,
+    voice: audio.voice,
+    createdAt: audio.createdAt.toISOString(),
+    streamUrl: `/api/audio/${audio.id}/stream`,
+  };
+}
+
 /**
  * POST /api/tts
  *
@@ -50,6 +78,11 @@ const requestSchema = z.object({
  * summary the client can hand to the global audio player. The actual
  * audio bytes are served via `/api/audio/[id]/stream` so the caller can
  * use `<audio>`'s native progressive download / range support.
+ *
+ * Quota: cache hits are always free. On a cache miss we check the user's
+ * monthly TTS cap (see `LIMITS_BY_PLAN[*].ttsPerMonth`) before kicking
+ * off a real Gemini call and return 429 with `{ error: "tts_quota_exceeded" }`
+ * when they're at or over the limit.
  */
 export async function POST(request: Request) {
   const session = await auth.api.getSession({
@@ -69,6 +102,7 @@ export async function POST(request: Request) {
     return Response.json({ error: message }, { status: 400 });
   }
 
+  const userId = session.user.id;
   const source: AudioSourceInput = {
     kind: parsed.source.kind,
     title: parsed.source.title,
@@ -79,30 +113,70 @@ export async function POST(request: Request) {
   };
 
   try {
-    const audio = await generateOrFetchAudio({
-      userId: session.user.id,
+    if (!parsed.text || !parsed.text.trim()) {
+      return Response.json(
+        { error: "Nothing to read aloud." },
+        { status: 400 },
+      );
+    }
+
+    // Cache hit short-circuit. Re-clicks on the same passage never count
+    // toward the monthly cap because no Gemini call is made.
+    const lookup = await findExistingAudio({
+      userId,
       text: parsed.text,
       voice: parsed.voice,
       source,
     });
+    if (lookup.existing) {
+      return Response.json(
+        {
+          audio: serializeAudio(lookup.existing),
+          maxInputChars: AUDIO_MAX_INPUT_CHARS,
+        },
+        { status: 200 },
+      );
+    }
+
+    // Cache miss → resolve the plan + count this month's clips so we can
+    // refuse over-cap users before paying for a Gemini round trip.
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isAlpha: true, subscriptionPlan: true },
+    });
+    const plan = resolveEffectivePlan({
+      subscriptionPlan: user?.subscriptionPlan ?? null,
+      isAlpha: user?.isAlpha ?? false,
+    });
+    const cap = LIMITS_BY_PLAN[plan].ttsPerMonth;
+    if (cap.limit !== null) {
+      const used = await countTtsGenerationsThisMonth(userId);
+      if (isOverLimit({ plan, feature: "ttsThisMonth", used })) {
+        return Response.json(
+          {
+            error: "tts_quota_exceeded",
+            message:
+              "You've reached your TTS generation limit for this month. Upgrade for more generations.",
+            plan,
+            used,
+            limit: cap.limit,
+          },
+          { status: 429 },
+        );
+      }
+    }
+
+    const created = await generateAndPersistAudio({
+      userId,
+      text: parsed.text,
+      voice: parsed.voice,
+      source,
+      contextKey: lookup.contextKey,
+    });
+
     return Response.json(
       {
-        audio: {
-          id: audio.id,
-          title: audio.title,
-          section: audio.section,
-          sourceKind: audio.sourceKind,
-          lessonId: audio.lessonId,
-          curriculumId: audio.curriculumId,
-          resourceId: audio.resourceId,
-          audioBytes: audio.audioBytes,
-          durationSeconds: audio.durationSeconds,
-          characterCount: audio.characterCount,
-          truncated: audio.truncated,
-          voice: audio.voice,
-          createdAt: audio.createdAt.toISOString(),
-          streamUrl: `/api/audio/${audio.id}/stream`,
-        },
+        audio: serializeAudio(created),
         maxInputChars: AUDIO_MAX_INPUT_CHARS,
       },
       { status: 200 },

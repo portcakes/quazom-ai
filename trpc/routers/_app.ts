@@ -1091,6 +1091,7 @@ export const appRouter = createTRPCRouter({
       select: {
         id: true,
         title: true,
+        tags: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -1106,6 +1107,7 @@ export const appRouter = createTRPCRouter({
           id: true,
           title: true,
           content: true,
+          tags: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -1123,20 +1125,27 @@ export const appRouter = createTRPCRouter({
           // the editor immediately opens it, so most calls won't pass these.
           title: z.string().max(200).optional(),
           content: z.string().max(NOTE_MAX_LENGTH * 4).optional(),
+          tags: z
+            .array(z.string().min(1).max(NOTE_TAG_MAX_LENGTH))
+            .max(NOTE_MAX_TAGS)
+            .optional(),
         })
         .optional(),
     )
     .mutation(async ({ ctx, input }) => {
+      const tags = normalizeTags(input?.tags);
       const note = await prisma.continuityNote.create({
         data: {
           id: crypto.randomUUID(),
           userId: ctx.userId,
           title: input?.title?.trim() || null,
           content: input?.content ?? '',
+          ...(tags ? { tags } : {}),
         },
         select: {
           id: true,
           title: true,
+          tags: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -1153,15 +1162,31 @@ export const appRouter = createTRPCRouter({
         // together. The cap is still bounded to keep one runaway client
         // from filling the table.
         content: z.string().max(NOTE_MAX_LENGTH * 4).optional(),
+        tags: z
+          .array(z.string().min(1).max(NOTE_TAG_MAX_LENGTH))
+          .max(NOTE_MAX_TAGS)
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (input.title === undefined && input.content === undefined) {
+      if (
+        input.title === undefined &&
+        input.content === undefined &&
+        input.tags === undefined
+      ) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Nothing to update',
         });
       }
+      // Treat an explicit empty `tags: []` as "clear all tags" while
+      // `tags: undefined` means "don't touch". `normalizeTags` returns
+      // `null` for an empty/blank array, so we branch on the raw input
+      // here to keep the explicit-clear behaviour available.
+      const tagsUpdate =
+        input.tags === undefined
+          ? undefined
+          : (normalizeTags(input.tags) ?? []);
       const result = await prisma.continuityNote.updateMany({
         where: { id: input.id, userId: ctx.userId },
         data: {
@@ -1169,6 +1194,7 @@ export const appRouter = createTRPCRouter({
             ? { title: input.title?.trim() || null }
             : {}),
           ...(input.content !== undefined ? { content: input.content } : {}),
+          ...(tagsUpdate !== undefined ? { tags: tagsUpdate } : {}),
         },
       });
       if (result.count === 0) {

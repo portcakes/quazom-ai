@@ -11,6 +11,7 @@ import {
   StickyNoteIcon,
   UserPlusIcon,
   UsersIcon,
+  Volume2Icon,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { StatCard } from "@/components/stat-card";
@@ -100,7 +101,7 @@ export default async function AdminOverviewPage({ searchParams }: PageProps) {
 
       <section
         aria-label="Generation activity"
-        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
       >
         <StatCard
           label="Curricula generated"
@@ -116,6 +117,12 @@ export default async function AdminOverviewPage({ searchParams }: PageProps) {
           label="Schedules created"
           value={overview.schedulesCreated}
           icon={CalendarDaysIcon}
+        />
+        <StatCard
+          label="TTS generations"
+          value={overview.ttsGenerated}
+          hint={`during ${rangeLabel(rangeId).toLowerCase()}`}
+          icon={Volume2Icon}
         />
         <StatCard
           label="Notes created"

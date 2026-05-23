@@ -114,43 +114,6 @@ export const auth = betterAuth({
             }
         },
     },
-    databaseHooks: {
-        user: {
-            create: {
-                // Once Better Auth finishes creating the User row, look for a
-                // live AlphaInvite for this email and mark it redeemed. If
-                // there isn't one (e.g. signup used the dev ALPHA_CODE
-                // fallback) this quietly no-ops.
-                after: async (user) => {
-                    try {
-                        const email = user.email.toLowerCase();
-                        const invite = await prisma.alphaInvite.findFirst({
-                            where: {
-                                email,
-                                redeemedAt: null,
-                                expiresAt: { gt: new Date() },
-                            },
-                            orderBy: { sentAt: "desc" },
-                            select: { id: true },
-                        });
-                        if (!invite) return;
-                        await prisma.alphaInvite.update({
-                            where: { id: invite.id },
-                            data: {
-                                redeemedAt: new Date(),
-                                redeemedByUserId: user.id,
-                            },
-                        });
-                    } catch (err) {
-                        console.error(
-                            "[auth] failed to redeem alpha invite",
-                            err,
-                        );
-                    }
-                },
-            },
-        },
-    },
     trustedOrigins,
     plugins: [
         polar({

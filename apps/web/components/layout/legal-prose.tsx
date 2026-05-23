@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 
+const MAIN_URL = process.env.NEXT_PUBLIC_MAIN_URL || "http://localhost:3001";
+
 export function LegalSiteHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-border/50 bg-background/85 backdrop-blur supports-backdrop-filter:bg-background/70">
@@ -23,7 +25,7 @@ export function LegalSiteHeader() {
             <Link href="/pricing">Pricing</Link>
           </Button>
           <Button asChild size="sm" className="font-medium">
-            <Link href="/waitlist">Join waitlist</Link>
+            <a href={`${MAIN_URL}/register`}>Sign up</a>
           </Button>
         </nav>
       </div>

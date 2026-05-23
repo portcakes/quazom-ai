@@ -7,6 +7,7 @@ import prisma from "@quazom-ai/db";
 export type ContinuityNoteSummary = {
   id: string;
   title: string | null;
+  tags: string[];
   createdAt: Date;
   updatedAt: Date;
 };
@@ -31,6 +32,7 @@ export async function getUserContinuityNotes(): Promise<ContinuityNoteSummary[]>
     select: {
       id: true,
       title: true,
+      tags: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -51,6 +53,7 @@ export async function getContinuityNoteForCurrentUser(
       id: true,
       title: true,
       content: true,
+      tags: true,
       createdAt: true,
       updatedAt: true,
     },

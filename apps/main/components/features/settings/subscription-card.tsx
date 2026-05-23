@@ -39,7 +39,7 @@ function planHeadline(args: {
     return "You're on Explorer. Upgrade to Scholar for unlimited generation.";
   }
   if (args.isAlpha) {
-    return "You're on the alpha plan. Upgrade to extend your generation limits and earn a founding-tier title.";
+    return "You're on the Open Alpha plan. Upgrade to unlock more generations and earn a founding-tier title.";
   }
   return "Pick a plan to extend your generation limits.";
 }
@@ -151,7 +151,7 @@ export function SubscriptionCard() {
               {currentInterval ? ` · ${intervalLabel(currentInterval)}` : ""}
             </Badge>
           ) : data.isAlpha ? (
-            <Badge variant="secondary">Alpha</Badge>
+            <Badge variant="secondary">Open Alpha</Badge>
           ) : (
             <Badge variant="outline">Free</Badge>
           )}

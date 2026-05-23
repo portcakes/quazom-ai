@@ -11,6 +11,7 @@ import {
   ShieldCheckIcon,
   SparklesIcon,
   StickyNoteIcon,
+  Volume2Icon,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { StatCard } from "@/components/stat-card";
@@ -30,6 +31,7 @@ const KIND_LABELS: Record<string, string> = {
   DISCUSSION_REPLY: "Discussion replies",
   SUBMISSION_FEEDBACK: "Quiz / exercise feedback",
   NOTE_SUMMARY: "Note summarizations",
+  TTS: "Audio (TTS)",
 };
 
 export default async function UserDetailPage({ params, searchParams }: PageProps) {
@@ -142,6 +144,12 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
           value={stats.schedulesInRange}
           hint={`${stats.schedulesAllTime.toLocaleString()} all-time`}
           icon={CalendarDaysIcon}
+        />
+        <StatCard
+          label="TTS generations"
+          value={stats.ttsInRange}
+          hint={`${stats.ttsAllTime.toLocaleString()} all-time`}
+          icon={Volume2Icon}
         />
         <StatCard
           label="Notes created"

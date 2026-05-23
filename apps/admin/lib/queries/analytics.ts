@@ -28,6 +28,10 @@ export type DashboardOverview = {
   annotationsCreated: number;
   noteSummarizations: number;
   schedulesCreated: number;
+  // GeneratedAudio rows created in range — one per unique TTS clip we
+  // actually synthesised (cache hits don't write a row, so this matches
+  // billable Gemini calls).
+  ttsGenerated: number;
   // Sum of every AiUsage row inside the range, regardless of `kind`.
   tokens: {
     input: number;
@@ -57,6 +61,7 @@ export async function getDashboardOverview(rangeId: RangeId): Promise<DashboardO
     annotationsCreated,
     noteSummarizations,
     schedulesCreated,
+    ttsGenerated,
     aiTokens,
     signupsAllTime,
     signInsAllTime,
@@ -86,6 +91,7 @@ export async function getDashboardOverview(rangeId: RangeId): Promise<DashboardO
       where: { createdAt: range, kind: "NOTE_SUMMARY" },
     }),
     prisma.studySchedule.count({ where: { createdAt: range } }),
+    prisma.generatedAudio.count({ where: { createdAt: range } }),
     prisma.aiUsage.aggregate({
       where: { createdAt: range },
       _sum: {
@@ -111,6 +117,7 @@ export async function getDashboardOverview(rangeId: RangeId): Promise<DashboardO
     annotationsCreated,
     noteSummarizations,
     schedulesCreated,
+    ttsGenerated,
     tokens: {
       input: aiTokens._sum.inputTokens ?? 0,
       output: aiTokens._sum.outputTokens ?? 0,
@@ -363,6 +370,8 @@ export type UserDetail = {
     schedulesInRange: number;
     schedulesAllTime: number;
     noteSummariesInRange: number;
+    ttsInRange: number;
+    ttsAllTime: number;
     tokensInRange: number;
     tokensAllTime: number;
   };
@@ -419,6 +428,8 @@ export async function getUserDetail(
     schedulesInRange,
     schedulesAllTime,
     noteSummariesInRange,
+    ttsInRange,
+    ttsAllTime,
     tokensInRange,
     tokensAllTime,
     tokensByKindAgg,
@@ -457,6 +468,8 @@ export async function getUserDetail(
     prisma.aiUsage.count({
       where: { userId, createdAt: range, kind: "NOTE_SUMMARY" },
     }),
+    prisma.generatedAudio.count({ where: { userId, createdAt: range } }),
+    prisma.generatedAudio.count({ where: { userId } }),
     prisma.aiUsage.aggregate({
       where: { userId, createdAt: range },
       _sum: { totalTokens: true },
@@ -501,6 +514,8 @@ export async function getUserDetail(
       schedulesInRange,
       schedulesAllTime,
       noteSummariesInRange,
+      ttsInRange,
+      ttsAllTime,
       tokensInRange: tokensInRange._sum.totalTokens ?? 0,
       tokensAllTime: tokensAllTime._sum.totalTokens ?? 0,
     },

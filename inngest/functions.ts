@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { inngest } from "./client";
 import { userChannel } from "./channels";
 import {
@@ -18,14 +17,7 @@ import {
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateObject, generateText } from "ai";
 import prisma from "@quazom-ai/db";
-import { sendAlphaInvite } from "@quazom-ai/emails";
 import { recordAiUsage } from "./ai-usage";
-import {
-  generateAlphaAccessKey,
-  getInviteBatchSize,
-  getInviteTtlMs,
-  getRegisterBaseUrl,
-} from "./alpha-keys";
 
 const google = createGoogleGenerativeAI();
 const MODEL = "gemini-2.5-flash-lite";
@@ -1259,126 +1251,3 @@ function projectTypeToDb(
   }
 }
 
-// --------------------------------------------------------------------------
-// weeklyAlphaInvites
-//
-// Mints rotating per-user alpha access keys and emails them to the next
-// batch of waitlist signups. Runs Mondays at 14:00 UTC by default and can
-// also be triggered ad-hoc by sending an `app/alpha-invites.send` event
-// (optionally with `{ data: { batchSize } }` to override the per-run cap).
-//
-// The function is idempotent at the email level: each step.run is keyed
-// by waitlist-entry id so an Inngest retry won't double-mint keys or
-// re-send a welcome to someone we already invited.
-// --------------------------------------------------------------------------
-export const weeklyAlphaInvites = inngest.createFunction(
-  {
-    id: "weekly-alpha-invites",
-    name: "Weekly alpha invites",
-    triggers: [
-      // Every Monday at 14:00 UTC. Tweak via the dashboard or by changing
-      // this string and redeploying.
-      { cron: "0 14 * * 1" },
-      // Lets ops staff (or an admin tool) kick off a fresh wave on demand
-      // by firing `inngest.send({ name: "app/alpha-invites.send" })`.
-      { event: "app/alpha-invites.send" },
-    ],
-  },
-  async ({ event, step, logger }) => {
-    const overrideBatchSize =
-      typeof (event?.data as { batchSize?: unknown } | undefined)?.batchSize ===
-      "number"
-        ? ((event!.data as { batchSize: number }).batchSize)
-        : undefined;
-    const batchSize = getInviteBatchSize(overrideBatchSize);
-    const ttlMs = getInviteTtlMs();
-    const registerBaseUrl = getRegisterBaseUrl();
-
-    const candidates = await step.run("load-uninvited-waitlist", async () => {
-      return prisma.waitlistEntry.findMany({
-        where: { invitedAt: null },
-        orderBy: { createdAt: "asc" },
-        take: batchSize,
-        select: { id: true, firstName: true, email: true },
-      });
-    });
-
-    if (candidates.length === 0) {
-      logger.info("No uninvited waitlist entries to process");
-      return { invited: 0, skipped: 0, batchSize };
-    }
-
-    let invited = 0;
-    let skipped = 0;
-
-    for (const entry of candidates) {
-      // Each per-entry side-effect lives in its own step.run so Inngest can
-      // retry just that slice on transient failures (DB blip, Resend 5xx)
-      // without re-doing the whole batch.
-      const result = await step.run(`invite-${entry.id}`, async () => {
-        const accessKey = generateAlphaAccessKey();
-        const expiresAt = new Date(Date.now() + ttlMs);
-
-        const invite = await prisma.alphaInvite.create({
-          data: {
-            id: randomUUID(),
-            email: entry.email,
-            accessKey,
-            waitlistEntryId: entry.id,
-            expiresAt,
-          },
-          select: { id: true, accessKey: true, expiresAt: true },
-        });
-
-        const registerUrl = `${registerBaseUrl}/register?key=${encodeURIComponent(invite.accessKey)}`;
-
-        const sendResult = await sendAlphaInvite({
-          to: entry.email,
-          firstName: entry.firstName,
-          accessKey: invite.accessKey,
-          registerUrl,
-          expiresAt: invite.expiresAt,
-        });
-
-        if (!sendResult.ok) {
-          // Don't mark the waitlist row as invited — leave it for the next
-          // run. We deliberately keep the AlphaInvite row around as an
-          // audit trail of the failed attempt.
-          return {
-            kind: "send-failed" as const,
-            inviteId: invite.id,
-            error: sendResult.error,
-          };
-        }
-
-        await prisma.$transaction([
-          prisma.alphaInvite.update({
-            where: { id: invite.id },
-            data: { sentAt: new Date() },
-          }),
-          prisma.waitlistEntry.update({
-            where: { id: entry.id },
-            data: { invitedAt: new Date() },
-          }),
-        ]);
-
-        return { kind: "sent" as const, inviteId: invite.id };
-      });
-
-      if (result.kind === "sent") {
-        invited += 1;
-      } else {
-        skipped += 1;
-        logger.warn(
-          `Alpha invite send failed for ${entry.email}: ${result.error}`,
-        );
-      }
-    }
-
-    logger.info(
-      `Alpha invite batch complete — invited ${invited}, skipped ${skipped}`,
-    );
-
-    return { invited, skipped, batchSize };
-  },
-);

@@ -28,6 +28,7 @@ import { useTRPC } from "@/trpc/client";
 import { RichTextEditor } from "./rich-text-editor";
 import { useContinuityNotes } from "./continuity-note-provider";
 import { downloadContinuityNoteAsPdf } from "./continuity-note-pdf";
+import { NoteTagsInput } from "@/components/features/notes/note-tags-input";
 
 const SAVE_DEBOUNCE_MS = 700;
 
@@ -112,10 +113,12 @@ function ContinuityNotePanelBody({
   const [hydrated, setHydrated] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   if (!hydrated && noteQuery.data) {
     setHydrated(true);
     setTitle(noteQuery.data.title ?? "");
     setContent(noteQuery.data.content ?? "");
+    setTags(noteQuery.data.tags ?? []);
   }
 
   // `savedSnapshot` mirrors what we last successfully wrote to the server.
@@ -125,6 +128,7 @@ function ContinuityNotePanelBody({
   const [savedSnapshot, setSavedSnapshot] = useState<{
     title: string;
     content: string;
+    tags: string[];
   } | null>(null);
   if (
     savedSnapshot === null &&
@@ -134,11 +138,59 @@ function ContinuityNotePanelBody({
     setSavedSnapshot({
       title: noteQuery.data.title ?? "",
       content: noteQuery.data.content ?? "",
+      tags: noteQuery.data.tags ?? [],
     });
   }
 
   const updateMutation = useMutation(
     trpc.updateContinuityNote.mutationOptions({
+      // Optimistically update the per-note cache as soon as the save fires.
+      // The panel body hydrates its local state from `getContinuityNote` on
+      // mount via a one-shot `hydrated` flag, so without this the cache
+      // still holds the pre-edit payload — closing and re-opening the same
+      // note before a full page reload would show the note as empty again.
+      // We also patch the list cache so the sidebar/grid reflect the new
+      // title, tags, and updatedAt in the same render.
+      onMutate: (variables) => {
+        const nextUpdatedAt = new Date().toISOString();
+        queryClient.setQueryData(
+          trpc.getContinuityNote.queryKey({ id: variables.id }),
+          (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              ...(variables.title !== undefined
+                ? { title: variables.title }
+                : {}),
+              ...(variables.content !== undefined
+                ? { content: variables.content }
+                : {}),
+              ...(variables.tags !== undefined ? { tags: variables.tags } : {}),
+              updatedAt: nextUpdatedAt,
+            };
+          },
+        );
+        queryClient.setQueryData(
+          trpc.listContinuityNotes.queryKey(),
+          (old) => {
+            if (!old) return old;
+            return old.map((entry) =>
+              entry.id === variables.id
+                ? {
+                    ...entry,
+                    ...(variables.title !== undefined
+                      ? { title: variables.title }
+                      : {}),
+                    ...(variables.tags !== undefined
+                      ? { tags: variables.tags }
+                      : {}),
+                    updatedAt: nextUpdatedAt,
+                  }
+                : entry,
+            );
+          },
+        );
+      },
       onSuccess: () => {
         queryClient.invalidateQueries({
           queryKey: trpc.listContinuityNotes.queryKey(),
@@ -146,7 +198,7 @@ function ContinuityNotePanelBody({
         // Snapshot the values we just shipped so future renders read the
         // editor as "saved". Stored via setState in a callback, not an
         // effect, which the new lint rule permits.
-        setSavedSnapshot({ title: title.trim(), content });
+        setSavedSnapshot({ title: title.trim(), content, tags });
       },
       onError: (err) => {
         toast.error(err.message ?? "Couldn't save note");
@@ -156,10 +208,13 @@ function ContinuityNotePanelBody({
 
   // Pure derivation of the save indicator state from local edits vs the
   // last snapshot we successfully wrote.
+  const tagsEqual = (a: string[], b: string[]) =>
+    a.length === b.length && a.every((t, i) => t === b[i]);
   const dirty =
     savedSnapshot !== null &&
     (savedSnapshot.title !== title.trim() ||
-      savedSnapshot.content !== content);
+      savedSnapshot.content !== content ||
+      !tagsEqual(savedSnapshot.tags, tags));
 
   // Debounced auto-save: each keystroke schedules a write 700ms out, and
   // any new keystroke resets that timer. The mutation only fires when the
@@ -176,13 +231,14 @@ function ContinuityNotePanelBody({
         id: noteId,
         title: title.trim() || null,
         content,
+        tags,
       });
     }, SAVE_DEBOUNCE_MS);
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, content, hydrated, noteId, dirty]);
+  }, [title, content, tags, hydrated, noteId, dirty]);
 
   // Flush any pending save when the editor closes so the user doesn't lose
   // the last keystrokes before unmount.
@@ -196,8 +252,9 @@ function ContinuityNotePanelBody({
       id: noteId,
       title: title.trim() || null,
       content,
+      tags,
     });
-  }, [hydrated, dirty, title, content, noteId, updateMutation]);
+  }, [hydrated, dirty, title, content, tags, noteId, updateMutation]);
 
   const handleClose = () => {
     flushSave();
@@ -283,6 +340,7 @@ function ContinuityNotePanelBody({
           placeholder="Untitled note"
           className="border-0 bg-transparent px-0 font-heading text-2xl font-bold tracking-tight shadow-none focus-visible:ring-0 focus-visible:border-0"
         />
+        <NoteTagsInput value={tags} onChange={setTags} />
         {noteQuery.isLoading || !hydrated ? (
           <div className="flex flex-1 items-center justify-center text-muted-foreground">
             <Loader2Icon className="size-5 animate-spin" />

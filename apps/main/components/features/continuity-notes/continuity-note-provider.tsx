@@ -31,6 +31,7 @@ type ActiveNoteUpdater =
 export type ContinuityNoteSummary = {
   id: string;
   title: string | null;
+  tags: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -119,17 +120,52 @@ export function ContinuityNoteProvider({ initialNotes, children }: Props) {
   // can no longer see (deleted on another device, or the wrong user
   // signed in). Once the notes list lands, clear the active id if it
   // isn't in the list — the wrapped setter also flushes localStorage.
+  //
+  // Skip during an in-flight refetch: createMutation.onSuccess sets the
+  // active id alongside invalidateQueries, and during the window before
+  // the refetch returns, `notesQuery.data` still holds the old list.
+  // Without this check the guard would clobber the freshly-set id on the
+  // very render that opens the new note's editor.
   useEffect(() => {
     if (!activeNoteId) return;
     if (notesQuery.isLoading) return;
+    if (notesQuery.isFetching) return;
     if (!notesQuery.data) return;
     if (notesQuery.data.some((note) => note.id === activeNoteId)) return;
     setActiveNoteId(null);
-  }, [activeNoteId, notesQuery.data, notesQuery.isLoading, setActiveNoteId]);
+  }, [
+    activeNoteId,
+    notesQuery.data,
+    notesQuery.isLoading,
+    notesQuery.isFetching,
+    setActiveNoteId,
+  ]);
 
   const createMutation = useMutation(
     trpc.createContinuityNote.mutationOptions({
       onSuccess: (created) => {
+        // Optimistically insert the new note into the list cache *before*
+        // setting it as the active note. Without this, the stale-id guard
+        // effect above would briefly see the new id missing from
+        // `notesQuery.data` (the refetch from `invalidateQueries` is async)
+        // and snap `activeNoteId` back to null — closing the editor we
+        // just tried to open. The subsequent invalidate refetch reconciles
+        // anything we might be missing.
+        queryClient.setQueryData(
+          trpc.listContinuityNotes.queryKey(),
+          (old) => {
+            const summary = {
+              id: created.id,
+              title: created.title ?? null,
+              tags: created.tags ?? [],
+              createdAt: created.createdAt,
+              updatedAt: created.updatedAt,
+            };
+            if (!old) return [summary];
+            if (old.some((n) => n.id === summary.id)) return old;
+            return [summary, ...old];
+          },
+        );
         queryClient.invalidateQueries({
           queryKey: trpc.listContinuityNotes.queryKey(),
         });

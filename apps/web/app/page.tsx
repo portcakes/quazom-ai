@@ -3,15 +3,15 @@ import Link from "next/link";
 import {
   BookOpenTextIcon,
   CalendarDaysIcon,
-  FlameIcon,
-  GraduationCapIcon,
+  FileTextIcon,
+  Headphones,
+  HighlighterIcon,
   NotebookPenIcon,
   SparklesIcon,
 } from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { CyclingTagline } from "@/components/hero/cycling-tagline";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { WaitlistForm } from "@/components/waitlist/waitlist-form";
 
 const MAIN_URL = process.env.NEXT_PUBLIC_MAIN_URL || "http://localhost:3001";
 
@@ -72,22 +72,28 @@ const features = [
       "Pick the days and hours that work for you. Quazom lays out a calendar with bite-sized sessions so the next thing to study is always one click away.",
   },
   {
-    icon: FlameIcon,
-    title: "Streaks and check-ins that stick",
-    body:
-      "A single button to mark today done. Watch the streak grow, see your progress on the calendar, and let the gentle pressure keep you coming back.",
-  },
-  {
     icon: NotebookPenIcon,
-    title: "Notes that travel with you",
+    title: "Markdown notes that travel with you",
     body:
-      "Capture an idea on the dashboard, drop a thought into a lesson—Quazom keeps your notes alongside the material so they're there when you return.",
+      "Capture an idea on the dashboard, drop a thought into a lesson—Quazom keeps your notes alongside the material in portable Markdown so they're never locked in.",
   },
   {
-    icon: GraduationCapIcon,
-    title: "Quizzes and discussions, built in",
+    icon: HighlighterIcon,
+    title: "Annotate lessons and resources",
     body:
-      "Test what you've learned with auto-generated quizzes, or talk a topic through with the AI tutor. Every interaction is grounded in the curriculum you're building.",
+      "Highlight passages and pin annotations directly to the text. Long-form Continuity Notes tie ideas across modules, curricula, and uploaded resources together.",
+  },
+  {
+    icon: Headphones,
+    title: "Listen to anything you've written",
+    body:
+      "Generate spoken audio of any note or resource and pick it up in the audio library. Read, listen, and revisit on whichever device fits the moment.",
+  },
+  {
+    icon: FileTextIcon,
+    title: "Upload your own resources",
+    body:
+      "Drop in PDFs, articles, and research papers. Quazom keeps them organised alongside your curricula so the source material is always one click away.",
   },
 ];
 
@@ -125,7 +131,7 @@ function SiteHeader() {
             <a href={`${MAIN_URL}/login`}>Sign in</a>
           </Button>
           <Button asChild size="sm" className="font-medium">
-            <Link href="/waitlist">Join waitlist</Link>
+            <a href={`${MAIN_URL}/register`}>Sign up</a>
           </Button>
         </nav>
       </div>
@@ -145,7 +151,7 @@ function HeroSection() {
         <div className="flex flex-col items-center gap-6">
           <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-1 text-xs font-medium tracking-wide text-muted-foreground shadow-xs">
             <SparklesIcon className="size-3.5 text-primary" />
-            Closed alpha — join the waitlist
+            Open alpha · free to start
           </span>
           <h1 className="font-heading text-4xl leading-[1.05] font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl lg:text-7xl">
             Personal curricula,
@@ -167,11 +173,16 @@ function HeroSection() {
             a daily schedule, streaks, and notes that travel with you.
           </p>
           <h2 className="font-heading text-2xl leading-tight tracking-tight text-foreground sm:text-3xl"> Watch the Demo: <a href={demoVideoUrl} target="_blank" className="underline underline-offset-2 hover:text-primary">Quazom in action</a></h2>
-          <div className="mt-4 w-full max-w-xl">
-            <WaitlistForm source="homepage" cta="Get my invite" />
+          <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row">
+            <Button asChild size="lg" className="font-medium">
+              <a href={`${MAIN_URL}/register`}>Start free</a>
+            </Button>
+            <Button asChild variant="ghost" size="lg">
+              <Link href="/pricing">View pricing</Link>
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Free during alpha · No credit card required ·{" "}
+            Free during open alpha · No credit card required ·{" "}
             <a
               href={`${MAIN_URL}/login`}
               className="underline underline-offset-2 hover:text-foreground"
@@ -303,20 +314,19 @@ function ClosingCtaSection() {
           <span className="italic text-primary">We&rsquo;ll build the curriculum.</span>
         </h2>
         <p className="max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-          Quazom is in closed alpha. Drop your name and email and we&rsquo;ll
-          send you an invite as soon as a spot opens up.
+          Quazom is in open alpha — free to start, with optional Founding tiers
+          for higher limits and a scholarly title beside your name.
         </p>
-        <div className="mt-2 w-full max-w-xl">
-          <WaitlistForm source="homepage" cta="Join the waitlist" />
+        <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">
+          <Button asChild size="lg" className="font-medium">
+            <a href={`${MAIN_URL}/register`}>Start free</a>
+          </Button>
+          <Button asChild variant="ghost" size="lg">
+            <Link href="/pricing">View pricing</Link>
+          </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Want the full pitch first?{" "}
-          <Link
-            href="/waitlist"
-            className="underline underline-offset-2 hover:text-foreground"
-          >
-            Read more about the alpha →
-          </Link>
+          Free during open alpha · No credit card required.
         </p>
       </div>
     </section>

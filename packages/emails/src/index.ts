@@ -1,14 +1,6 @@
 import * as React from "react";
 import { getFromAddress, getReplyToAddress, getResend } from "./client";
 import {
-  WaitlistWelcome,
-  type WaitlistWelcomeProps,
-} from "./templates/waitlist-welcome";
-import {
-  AlphaInvite,
-  type AlphaInviteProps,
-} from "./templates/alpha-invite";
-import {
   EmailVerification,
   type EmailVerificationProps,
 } from "./templates/email-verification";
@@ -66,34 +58,6 @@ async function send({
   }
 }
 
-export async function sendWaitlistWelcome(
-  options: SendOptions & WaitlistWelcomeProps,
-): Promise<SendResult> {
-  const { to, from, replyTo, ...props } = options;
-  return send({
-    to,
-    from,
-    replyTo,
-    subject: `You're on the Quazom waitlist, ${props.firstName}`,
-    react: React.createElement(WaitlistWelcome, props),
-    tags: [{ name: "category", value: "waitlist_welcome" }],
-  });
-}
-
-export async function sendAlphaInvite(
-  options: SendOptions & AlphaInviteProps,
-): Promise<SendResult> {
-  const { to, from, replyTo, ...props } = options;
-  return send({
-    to,
-    from,
-    replyTo,
-    subject: `Your Quazom alpha invite is ready, ${props.firstName}`,
-    react: React.createElement(AlphaInvite, props),
-    tags: [{ name: "category", value: "alpha_invite" }],
-  });
-}
-
 export async function sendEmailVerification(
   options: SendOptions & EmailVerificationProps,
 ): Promise<SendResult> {
@@ -123,14 +87,10 @@ export async function sendPasswordReset(
 }
 
 export {
-  WaitlistWelcome,
-  AlphaInvite,
   EmailVerification,
   PasswordReset,
 };
 export type {
-  WaitlistWelcomeProps,
-  AlphaInviteProps,
   EmailVerificationProps,
   PasswordResetProps,
 };

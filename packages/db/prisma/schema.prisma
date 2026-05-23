@@ -485,6 +485,10 @@ model ContinuityNote {
   // links/highlights/etc. survive a round trip; we never sanitise on read,
   // only on write.
   content   String   @default("")
+  // Free-form tags (NOTE_MAX_TAGS · NOTE_TAG_MAX_LENGTH constants apply on
+  // write). Mirrors the markdown `Note.tags` column so the regular-note
+  // tag UX and the continuity-note tag UX share helpers.
+  tags      String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

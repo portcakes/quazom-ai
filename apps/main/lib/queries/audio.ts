@@ -67,16 +67,15 @@ const AUDIO_SUMMARY_SELECT = {
 
 /**
  * Look up an existing GeneratedAudio for this user that matches the
- * passed (text, voice, model) tuple, or generate + persist a new one.
+ * passed (text, voice, model) tuple. Returns null on cache miss so the
+ * caller can decide whether to enforce a quota before kicking off a real
+ * Gemini call via {@link generateAndPersistAudio}.
  *
- * Dedupe key is `(userId, contextKey)` — clicking "Speak text" on the
- * same passage twice always returns the same row, regardless of how
- * many times the page is reloaded.
- *
- * Throws plain `Error` on misconfiguration / generation failure so
- * route handlers can surface the message verbatim.
+ * Side-effect: when the cache hit's display metadata (title/section/FKs)
+ * has drifted from the latest source, we patch the row so the audio
+ * library stays in sync with where the user is currently using the clip.
  */
-export async function generateOrFetchAudio({
+export async function findExistingAudio({
   userId,
   text,
   voice,
@@ -86,10 +85,59 @@ export async function generateOrFetchAudio({
   text: string;
   voice?: string;
   source: AudioSourceInput;
+}): Promise<{ contextKey: string; existing: GeneratedAudioSummary | null }> {
+  const finalVoice = voice || DEFAULT_TTS_VOICE;
+  const contextKey = ttsContextKey({ text, voice: finalVoice });
+
+  const existing = await prisma.generatedAudio.findUnique({
+    where: { userId_contextKey: { userId, contextKey } },
+    select: AUDIO_SUMMARY_SELECT,
+  });
+  if (!existing) return { contextKey, existing: null };
+
+  const needsUpdate =
+    existing.title !== source.title ||
+    (existing.section ?? null) !== (source.section ?? null) ||
+    existing.sourceKind !== source.kind ||
+    (existing.lessonId ?? null) !== (source.lessonId ?? null) ||
+    (existing.curriculumId ?? null) !== (source.curriculumId ?? null) ||
+    (existing.resourceId ?? null) !== (source.resourceId ?? null);
+  if (!needsUpdate) return { contextKey, existing };
+
+  const updated = await prisma.generatedAudio.update({
+    where: { id: existing.id },
+    data: {
+      title: source.title,
+      section: source.section ?? null,
+      sourceKind: source.kind,
+      lessonId: source.lessonId ?? null,
+      curriculumId: source.curriculumId ?? null,
+      resourceId: source.resourceId ?? null,
+    },
+    select: AUDIO_SUMMARY_SELECT,
+  });
+  return { contextKey, existing: updated };
+}
+
+/**
+ * Run Gemini + R2 upload + Prisma insert for a brand new clip. Callers
+ * MUST have already short-circuited on a cache hit via
+ * {@link findExistingAudio}; calling this on a duplicate `(userId, contextKey)`
+ * will fail the unique constraint.
+ */
+export async function generateAndPersistAudio({
+  userId,
+  text,
+  voice,
+  source,
+  contextKey,
+}: {
+  userId: string;
+  text: string;
+  voice?: string;
+  source: AudioSourceInput;
+  contextKey: string;
 }): Promise<GeneratedAudioSummary> {
-  if (!text || !text.trim()) {
-    throw new Error("Nothing to read aloud.");
-  }
   if (!r2IsConfigured()) {
     throw new Error(
       "Audio storage is not configured on this server. Set R2_* env vars to enable persistent audio.",
@@ -97,47 +145,6 @@ export async function generateOrFetchAudio({
   }
 
   const finalVoice = voice || DEFAULT_TTS_VOICE;
-  const contextKey = ttsContextKey({ text, voice: finalVoice });
-
-  // Existing clip: short-circuit. We refresh the FK columns + display
-  // title in case the user re-pinned the audio against a different
-  // lesson/resource since last time, but otherwise we never touch R2.
-  const existing = await prisma.generatedAudio.findUnique({
-    where: { userId_contextKey: { userId, contextKey } },
-    select: AUDIO_SUMMARY_SELECT,
-  });
-  if (existing) {
-    // Update the source metadata in case a callsite changed (e.g. the
-    // text moved to a different lesson). We only write when something
-    // actually differs to avoid unnecessary updatedAt churn.
-    const needsUpdate =
-      existing.title !== source.title ||
-      (existing.section ?? null) !== (source.section ?? null) ||
-      existing.sourceKind !== source.kind ||
-      (existing.lessonId ?? null) !== (source.lessonId ?? null) ||
-      (existing.curriculumId ?? null) !== (source.curriculumId ?? null) ||
-      (existing.resourceId ?? null) !== (source.resourceId ?? null);
-    if (needsUpdate) {
-      const updated = await prisma.generatedAudio.update({
-        where: { id: existing.id },
-        data: {
-          title: source.title,
-          section: source.section ?? null,
-          sourceKind: source.kind,
-          lessonId: source.lessonId ?? null,
-          curriculumId: source.curriculumId ?? null,
-          resourceId: source.resourceId ?? null,
-        },
-        select: AUDIO_SUMMARY_SELECT,
-      });
-      return updated;
-    }
-    return existing;
-  }
-
-  // Cache miss → call Gemini. We don't pre-allocate the row — if Gemini
-  // fails or R2 rejects the upload we'd be stuck cleaning up later. The
-  // create happens last, after both side effects have committed.
   const result = await generateSpeech({ text, voice: finalVoice });
 
   const audioId = crypto.randomUUID();
@@ -181,6 +188,47 @@ export async function generateOrFetchAudio({
   });
 
   return created;
+}
+
+/**
+ * Convenience wrapper preserving the historical contract — looks up an
+ * existing clip and falls through to a fresh generation. Used by tRPC
+ * procedures that don't enforce a quota; the `/api/tts` route handler
+ * splits the two steps explicitly so it can run a cap check on cache miss.
+ *
+ * Dedupe key is `(userId, contextKey)` — clicking "Speak text" on the
+ * same passage twice always returns the same row.
+ */
+export async function generateOrFetchAudio({
+  userId,
+  text,
+  voice,
+  source,
+}: {
+  userId: string;
+  text: string;
+  voice?: string;
+  source: AudioSourceInput;
+}): Promise<GeneratedAudioSummary> {
+  if (!text || !text.trim()) {
+    throw new Error("Nothing to read aloud.");
+  }
+
+  const { contextKey, existing } = await findExistingAudio({
+    userId,
+    text,
+    voice,
+    source,
+  });
+  if (existing) return existing;
+
+  return generateAndPersistAudio({
+    userId,
+    text,
+    voice,
+    source,
+    contextKey,
+  });
 }
 
 /** Sentinel char count beyond which the server-side TTS will truncate. */

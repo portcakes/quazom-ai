@@ -27,7 +27,6 @@ import {
 import { Input } from "@quazom-ai/ui/components/ui/input";
 import { Spinner } from "@quazom-ai/ui/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
-import { validateAlphaAccessKey } from "@/lib/alpha-invites";
 import { GoogleAuthButton } from "@/components/auth/google-auth-button";
 
 const registerSchema = z
@@ -36,10 +35,6 @@ const registerSchema = z
     email: z.email("Please enter a valid email address."),
     password: z.string().min(8, "Password must be at least 8 characters."),
     confirmPassword: z.string(),
-    alphaCode: z
-      .string()
-      .trim()
-      .min(1, "Please enter your alpha access key."),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match.",
@@ -48,13 +43,15 @@ const registerSchema = z
 
 type RegisterValues = z.infer<typeof registerSchema>;
 
+// Mirror the keys accepted by `apps/main/app/api/checkout-intent/route.ts`.
+// Any other value coming in from the marketing site CTAs is treated as
+// "no intent" so a tampered URL can't push a user into a wrong checkout.
+const ALLOWED_PLANS = new Set(["explorer", "scholar"]);
+const ALLOWED_INTERVALS = new Set(["month", "year"]);
+
 export function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Pre-fill the alpha code when the user arrives from an invite email
-  // (`/register?key=QUAZOM-XXXX-XXXX-XXXX`), so they don't have to copy
-  // it themselves.
-  const prefilledKey = searchParams.get("key") ?? "";
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<RegisterValues>({
@@ -64,7 +61,6 @@ export function RegisterForm() {
       email: "",
       password: "",
       confirmPassword: "",
-      alphaCode: prefilledKey,
     },
     mode: "onTouched",
   });
@@ -72,18 +68,32 @@ export function RegisterForm() {
   const onSubmit = async (values: RegisterValues) => {
     setIsSubmitting(true);
 
-    // Validate the alpha key against the AlphaInvite table *before* asking
-    // Better Auth to create the user. The key is bound to a specific email,
-    // so a stray reuse fails here without ever creating a row. After signup,
-    // the auth `user.create.after` hook marks the matching invite redeemed.
-    const validation = await validateAlphaAccessKey({
-      email: values.email,
-      accessKey: values.alphaCode,
-    });
-    if (!validation.ok) {
-      form.setError("alphaCode", { message: validation.error });
-      setIsSubmitting(false);
-      return;
+    // If the user arrived from a Founding-tier CTA (e.g.
+    // `/register?plan=explorer&checkout=1`), capture that intent in a
+    // short-lived httpOnly cookie. The cookie survives the email-verification
+    // round trip so the in-app CheckoutIntentLauncher can fire the Polar
+    // checkout once they finish onboarding.
+    const planParam = searchParams.get("plan")?.toLowerCase() ?? null;
+    const intervalParam =
+      searchParams.get("interval")?.toLowerCase() ?? "month";
+    const checkoutFlag = searchParams.get("checkout");
+    if (
+      checkoutFlag === "1" &&
+      planParam &&
+      ALLOWED_PLANS.has(planParam) &&
+      ALLOWED_INTERVALS.has(intervalParam)
+    ) {
+      try {
+        await fetch("/api/checkout-intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan: planParam, interval: intervalParam }),
+        });
+      } catch (err) {
+        // Best-effort — if the cookie write fails the user can still upgrade
+        // from the in-app Settings page, so we don't block signup on it.
+        console.warn("[register] failed to persist checkout intent", err);
+      }
     }
 
     // The callbackURL is what Better Auth appends to the verification email
@@ -210,29 +220,6 @@ export function RegisterForm() {
                       {...field}
                     />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="alphaCode"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Alpha access key</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="text"
-                      autoComplete="off"
-                      disabled={isSubmitting}
-                      placeholder="QUAZOM-XXXX-XXXX-XXXX"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    The unique key from your invite email. Bound to the
-                    email address you signed up with.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

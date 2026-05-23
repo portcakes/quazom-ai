@@ -19,7 +19,7 @@ type Row = {
 };
 
 const PLAN_LABELS: Record<PlanUsageSnapshot["plan"], string> = {
-  ALPHA: "Alpha",
+  ALPHA: "Open Alpha",
   FREE: "Free",
   EXPLORER: "Explorer",
   SCHOLAR: "Scholar",
@@ -41,11 +41,12 @@ export function UsageMeter({ usage, isLoading }: Props) {
   }
 
   // Scholar (and anything else with every cap unlimited) gets a friendly
-  // "no caps apply" line instead of three meters with infinite ceilings.
+  // "no caps apply" line instead of four meters with infinite ceilings.
   if (
     usage.curricula.limit === null &&
     usage.lessonsThisMonth.limit === null &&
-    usage.discussionsThisMonth.limit === null
+    usage.discussionsThisMonth.limit === null &&
+    usage.ttsThisMonth.limit === null
   ) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -70,6 +71,11 @@ export function UsageMeter({ usage, isLoading }: Props) {
       label: "Discussion lessons this month",
       description: "A subset of the lesson cap above.",
       data: usage.discussionsThisMonth,
+    },
+    {
+      label: "TTS generations this month",
+      description: "Each unique note or passage you speak counts once.",
+      data: usage.ttsThisMonth,
     },
   ];
 

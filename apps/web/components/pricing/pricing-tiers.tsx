@@ -10,7 +10,8 @@ import {
 } from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { cn } from "@quazom-ai/ui/lib/utils";
-import Link from "next/link";
+
+const MAIN_URL = process.env.NEXT_PUBLIC_MAIN_URL || "http://localhost:3001";
 
 type Interval = "monthly" | "yearly";
 
@@ -39,28 +40,30 @@ type Tier = {
 
 const TIERS: ReadonlyArray<Tier> = [
   {
-    badge: "Free during alpha",
-    name: "Alpha",
+    badge: "Free · open alpha",
+    name: "Open Alpha",
     tagline:
-      "On the house while we tune the platform. The same Quazom every founding member uses, just with bounded generation while we're in closed alpha.",
+      "The whole core platform, on the house. Generate curricula, write notes, schedule study, and listen to your work — with sensible monthly caps so we can keep the servers warm.",
     icon: LeafIcon,
     price: null,
     freeLabel: "Free",
-    limitsLabel: "Generation limits while in alpha",
+    limitsLabel: "Monthly generation limits",
     features: [
       "5 curriculum generations (lifetime cap)",
-      "30 lesson generations per month (resets the 1st)",
+      "30 lesson generations per month",
       "10 discussion-style lessons per month",
+      "10 TTS audio generations per month",
       "Markdown notes, annotations, and resource uploads",
-      "Daily check-ins, streaks, and study scheduling",
-      "Module graduation system across beginner → advanced",
+      "Continuity Notes with tags",
+      "Study scheduling, check-ins, and streaks",
+      "Module graduation across beginner → advanced",
     ],
     bestFor: [
       "Anyone curious to try Quazom",
       "Students supplementing coursework",
       "Hobbyists exploring a new interest",
     ],
-    cta: { label: "Join the waitlist", href: "/waitlist" },
+    cta: { label: "Start free", href: `${MAIN_URL}/register` },
   },
   {
     badge: "Founding window · until July 7, 2026",
@@ -72,13 +75,13 @@ const TIERS: ReadonlyArray<Tier> = [
       monthly: { amount: "$5", suffix: "/mo" },
       yearly: { amount: "$100", suffix: "/yr", savings: "Save 4 months" },
     },
-    limitsLabel: "Generation limits",
+    limitsLabel: "Higher monthly limits",
     features: [
       "10 curriculum generations per month",
       "100 lesson generations per month",
-      "Everything in Alpha",
-      "Continuity Notes",
-      "Note importing & exporting",
+      "30 discussion-style lessons per month",
+      "50 TTS audio generations per month",
+      "Everything in Open Alpha",
       "“Founding Explorer” title beside your name",
     ],
     bestFor: [
@@ -88,9 +91,9 @@ const TIERS: ReadonlyArray<Tier> = [
       "Lifelong learners exploring multiple interests",
     ],
     cta: {
-      label: "Reserve a Founding seat",
-      href: "/waitlist",
-      variant: "outline",
+      label: "Get Founding Explorer",
+      href: `${MAIN_URL}/register?plan=explorer&checkout=1`,
+      variant: "default",
     },
     highlight: true,
     ribbon: "Most popular",
@@ -109,9 +112,9 @@ const TIERS: ReadonlyArray<Tier> = [
     features: [
       "Unlimited curriculum generation",
       "Unlimited lesson generation",
+      "Unlimited TTS audio generations",
       "Everything in Founding Explorer",
       "Priority access to new features",
-      "Advanced Continuity Curricula (interdisciplinary)",
       "“Founding Scholar” title beside your name",
     ],
     bestFor: [
@@ -121,8 +124,8 @@ const TIERS: ReadonlyArray<Tier> = [
       "Heavy Quazom users",
     ],
     cta: {
-      label: "Reserve a Founding seat",
-      href: "/waitlist",
+      label: "Get Founding Scholar",
+      href: `${MAIN_URL}/register?plan=scholar&checkout=1`,
       variant: "outline",
     },
   },
@@ -303,7 +306,7 @@ function TierCard({ tier, interval }: { tier: Tier; interval: Interval }) {
           variant={tier.highlight ? "default" : tier.cta.variant ?? "default"}
           className="w-full"
         >
-          <Link href={tier.cta.href}>{tier.cta.label}</Link>
+          <a href={tier.cta.href}>{tier.cta.label}</a>
         </Button>
       </div>
     </article>
@@ -318,15 +321,15 @@ function PriceBlock({
   freeLabel?: string;
 }) {
   if (!price) {
-    // Alpha tier — render a "Free" stamp where the price would normally
-    // sit so all three cards keep their vertical rhythm aligned.
+    // Open Alpha tier — render a "Free" stamp where the price would
+    // normally sit so all three cards keep their vertical rhythm aligned.
     return (
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline gap-2">
           <span className="font-heading text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
             {freeLabel ?? "Free"}
           </span>
-          <span className="text-sm text-muted-foreground">during alpha</span>
+          <span className="text-sm text-muted-foreground">forever</span>
         </div>
         <p className="text-xs text-muted-foreground">
           No credit card required.

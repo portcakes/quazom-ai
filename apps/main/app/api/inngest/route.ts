@@ -8,7 +8,6 @@ import {
   generateLesson,
   gradeSubmission,
   replyToDiscussion,
-  weeklyAlphaInvites,
 } from "@/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -21,6 +20,5 @@ export const { GET, POST, PUT } = serve({
     generateLesson,
     gradeSubmission,
     replyToDiscussion,
-    weeklyAlphaInvites,
   ],
 });
