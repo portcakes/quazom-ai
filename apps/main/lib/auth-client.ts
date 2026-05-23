@@ -16,3 +16,23 @@ export const authClient = createAuthClient({
         organizationClient(),
     ],
 });
+
+export const signInWithGoogle = async (callbackURL: string) => {
+    const data = await authClient.signIn.social({
+        provider: "google",
+        callbackURL: callbackURL,
+    });
+    return data;
+};
+
+// Connect Google to an already-authenticated session (used from /settings).
+// Hits POST /api/auth/link-social, which redirects through Google and back
+// to `callbackURL`. Better Auth's link-social route enforces our
+// `account.accountLinking` config (trustedProviders, allowDifferentEmails).
+export const linkGoogleAccount = async (callbackURL: string) => {
+    const data = await authClient.linkSocial({
+        provider: "google",
+        callbackURL,
+    });
+    return data;
+};

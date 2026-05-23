@@ -28,6 +28,7 @@ import { Input } from "@quazom-ai/ui/components/ui/input";
 import { Spinner } from "@quazom-ai/ui/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
 import { validateAlphaAccessKey } from "@/lib/alpha-invites";
+import { GoogleAuthButton } from "@/components/auth/google-auth-button";
 
 const registerSchema = z
   .object({
@@ -126,6 +127,16 @@ export function RegisterForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <GoogleAuthButton
+          mode="signIn"
+          label="Sign up with Google"
+          callbackURL="/"
+        />
+        <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-muted-foreground">
+          <span className="h-px flex-1 bg-border" aria-hidden />
+          <span>or</span>
+          <span className="h-px flex-1 bg-border" aria-hidden />
+        </div>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-5">
             <FormField

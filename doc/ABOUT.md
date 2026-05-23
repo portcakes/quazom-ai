@@ -109,8 +109,6 @@ As users complete modules and assessments, Quazom tracks advancement and mastery
 
 ---
 
-# Upcoming Features
-
 ## Resource File Uploads
 
 Upload PDFs, articles, research papers, and other learning resources directly into Quazom.
@@ -129,7 +127,27 @@ Create persistent notes that span multiple lessons, modules, curricula, and rese
 
 Continuity Notes are designed to function as long-term intellectual workspaces where users can continuously build upon ideas over time.
 
+Users can write and edit in rich text, add links to lessons and resources, and add tags to organize their notes.
+
 ---
+
+## Note Importing & Exporting
+
+Import and export notes and research archives in PDF, TXT, or MD format.
+
+Users should always maintain ownership and accessibility of their work.
+
+---
+
+## TTS Generation & Audio Library
+
+Generate and store spoken audio versions of notes and resources in an audio library.
+
+Users can listen to their notes and resources through the audio player.
+
+---
+
+# Upcoming Features
 
 ## Continuity Curricula
 
@@ -156,14 +174,6 @@ Introduce lightweight progression systems including:
 - progression records
 
 Quazom’s gamification philosophy focuses on mastery, growth, and discovery rather than addictive engagement loops.
-
----
-
-## Note Importing & Exporting
-
-Import and export notes and research archives in portable formats.
-
-Users should always maintain ownership and accessibility of their work.
 
 ---
 

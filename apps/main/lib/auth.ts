@@ -43,6 +43,27 @@ export const auth = betterAuth({
     database: prismaAdapter(prisma, {
         provider: "postgresql",
     }),
+    baseURL: process.env.BETTER_AUTH_URL,
+    socialProviders: {
+        google: {
+            prompt: "select_account",
+            clientId: process.env.GOOGLE_CLIENT_ID as string,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+        },
+    },
+    account: {
+        // Auto-link an incoming Google sign-in to an existing email/password
+        // user when the email matches. Google always returns
+        // `email_verified: true`, but listing it under `trustedProviders` is
+        // belt-and-braces so a rare verified=false response still links.
+        // `allowDifferentEmails` is restated as a guardrail against future
+        // helpers cross-linking mismatched identities.
+        accountLinking: {
+            enabled: true,
+            trustedProviders: ["google"],
+            allowDifferentEmails: false,
+        },
+    },
     emailAndPassword: {
         enabled: true,
         autoSignIn: true,

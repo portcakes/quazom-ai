@@ -35,6 +35,7 @@ import type { ThemeMode } from "@quazom-ai/db/enums";
 import { useTRPC } from "@/trpc/client";
 import { DisableAccountDialog } from "./disable-account-dialog";
 import { DeleteAccountDialog } from "./delete-account-dialog";
+import { LinkedAccountsCard } from "./linked-accounts-card";
 import { UsageMeter } from "./usage-meter";
 import { SubscriptionCard } from "./subscription-card";
 import { TitlePicker } from "./title-picker";
@@ -305,6 +306,8 @@ export function SettingsView({ initialUser }: Props) {
           </div>
         </CardContent>
       </Card>
+
+      <LinkedAccountsCard />
 
       <Card>
         <CardHeader>

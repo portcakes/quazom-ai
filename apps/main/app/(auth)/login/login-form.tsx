@@ -26,6 +26,7 @@ import {
 import { Input } from "@quazom-ai/ui/components/ui/input";
 import { Spinner } from "@quazom-ai/ui/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
+import { GoogleAuthButton } from "@/components/auth/google-auth-button";
 
 const loginSchema = z.object({
   email: z.email("Please enter a valid email address."),
@@ -95,6 +96,16 @@ export function LoginForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <GoogleAuthButton
+          mode="signIn"
+          label="Continue with Google"
+          callbackURL="/"
+        />
+        <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-muted-foreground">
+          <span className="h-px flex-1 bg-border" aria-hidden />
+          <span>or</span>
+          <span className="h-px flex-1 bg-border" aria-hidden />
+        </div>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-5">
             <FormField
