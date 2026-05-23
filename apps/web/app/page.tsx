@@ -140,7 +140,7 @@ function SiteHeader() {
 }
 
 function HeroSection() {
-  const demoVideoUrl = "https://youtu.be/7Pf4W9E-NKc";
+  const demoVideoUrl = "https://youtu.be/I9OR1eP4Kx8";
   // Pick the first tagline on the server so the SSR HTML and the first client
   // render agree; the CyclingTagline component takes over and rotates from there.
   const initialTaglineIndex = Math.floor(Math.random() * HERO_TAGLINES.length);
@@ -172,7 +172,7 @@ function HeroSection() {
             modules, lessons, exercises, and quizzes—then keep you on track with
             a daily schedule, streaks, and notes that travel with you.
           </p>
-          <h2 className="font-heading text-2xl leading-tight tracking-tight text-foreground sm:text-3xl"> Watch the Demo: <a href={demoVideoUrl} target="_blank" className="underline underline-offset-2 hover:text-primary">Quazom in action</a></h2>
+          <h2 className="font-heading text-lg leading-tight tracking-tight text-foreground sm:text-3xl"> Watch a Demo: <a href={demoVideoUrl} target="_blank" className="underline underline-offset-2 hover:text-primary">Quazom in action</a></h2>
           <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row">
             <Button asChild size="lg" className="font-medium">
               <a href={`${MAIN_URL}/register`}>Start free</a>
