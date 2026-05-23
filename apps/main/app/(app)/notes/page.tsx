@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/auth-utils";
 import { NotesGrid } from "@/components/features/notes/notes-grid";
+import { ContinuityNotesGrid } from "@/components/features/continuity-notes/continuity-notes-grid";
 
 export const metadata = {
   title: "Notes",
@@ -20,6 +21,12 @@ export default async function NotesPage() {
             free-form thoughts. Click any note to edit.
           </p>
         </div>
+      </section>
+      {/* Continuity Notes get top billing — they're the long-form notebooks
+          that tie everything together, and we want them in front of the
+          smaller per-lesson notes/annotations list below. */}
+      <section className="mx-auto w-full max-w-6xl px-6 pt-8">
+        <ContinuityNotesGrid />
       </section>
       <section className="mx-auto w-full max-w-6xl px-6 py-8">
         <NotesGrid useBottomSheet />

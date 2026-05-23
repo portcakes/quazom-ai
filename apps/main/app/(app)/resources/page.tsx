@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/auth-utils";
 import { ResourcesGrid } from "@/components/features/resources/resources-grid";
+import { AudioLibrarySection } from "@/components/features/audio-player/audio-library-section";
 
 export const metadata = {
   title: "Resources",
@@ -24,6 +25,12 @@ export default async function ResourcesPage() {
       </section>
       <section className="mx-auto w-full max-w-6xl px-6 py-8">
         <ResourcesGrid scopeLabel="Personal collection" />
+      </section>
+      {/* TTS audio library — same underlying data the audio player bar
+          surfaces, but rendered inline so users have a primary surface to
+          manage their generated clips. */}
+      <section className="mx-auto w-full max-w-6xl px-6 pb-12">
+        <AudioLibrarySection />
       </section>
     </div>
   );

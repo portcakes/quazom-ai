@@ -65,6 +65,14 @@ model User {
   // doesn't have to wait until lunchtime UTC for a fresh check-in to unlock.
   // Defaults to UTC; the settings page surfaces this so users can override.
   timezone        String            @default("UTC")
+  // Persisted appearance preference. Defaults to LIGHT so a brand-new
+  // account always boots into the canonical paper-coloured UI; users can
+  // switch to DARK or SYSTEM (follow OS) from Settings, and the choice
+  // syncs across every device they sign into. The next-themes client
+  // wrapper still owns the live `.dark` class on <html>; this column is
+  // the cross-device source of truth that gets pushed into next-themes
+  // on app boot.
+  themeMode       ThemeMode         @default(LIGHT)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   sessions        Session[]
@@ -84,6 +92,15 @@ model User {
 
   @@unique([email])
   @@map("user")
+}
+
+// Cross-device appearance preference. SYSTEM defers to the OS-level
+// "prefers-color-scheme" media query at render time. New users default
+// to LIGHT.
+enum ThemeMode {
+  LIGHT
+  DARK
+  SYSTEM
 }
 
 model Session {

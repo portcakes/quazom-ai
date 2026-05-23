@@ -3,6 +3,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import prisma from "@quazom-ai/db";
+import type { ThemeMode } from "@quazom-ai/db/enums";
 import { titleLabel } from "@/lib/subscription/titles";
 
 export type CurrentUser = {
@@ -14,6 +15,12 @@ export type CurrentUser = {
   isAlpha: boolean;
   isDisabled: boolean;
   timezone: string;
+  /**
+   * Cross-device appearance preference. The next-themes client wrapper
+   * owns the live `.dark` class; this value is the DB-backed source of
+   * truth pushed into next-themes on app boot.
+   */
+  themeMode: ThemeMode;
   /**
    * The user's currently displayed scholarly title (e.g. "Founding Scholar"),
    * or `null` when nothing is selected. Surfaced beside the first name in
@@ -36,6 +43,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       isAlpha: true,
       isDisabled: true,
       timezone: true,
+      themeMode: true,
       selectedTitle: true,
     },
   });
@@ -52,6 +60,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     isAlpha: user.isAlpha,
     isDisabled: user.isDisabled,
     timezone: user.timezone,
+    themeMode: user.themeMode,
     selectedTitleLabel: titleLabel(user.selectedTitle),
   };
 }

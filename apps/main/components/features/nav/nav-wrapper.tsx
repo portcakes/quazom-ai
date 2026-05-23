@@ -1,5 +1,6 @@
 import AppSidebar from "./app-sidebar";
 import Navbar from "./navbar";
+import { SidebarEdgeGesture } from "./sidebar-edge-gesture";
 import {
     SidebarInset,
     SidebarProvider,
@@ -13,6 +14,7 @@ import { ContinuityNoteProvider } from "../continuity-notes/continuity-note-prov
 import { ContinuityNotePanel } from "../continuity-notes/continuity-note-panel";
 import { AudioPlayerProvider } from "../audio-player/audio-player-provider";
 import { AudioPlayerBar } from "../audio-player/audio-player-bar";
+import { ThemeSync } from "@/components/shared/theme-sync";
 
 export default async function NavWrapper({ children }: { children: React.ReactNode }) {
     await requireAuth();
@@ -49,6 +51,8 @@ export default async function NavWrapper({ children }: { children: React.ReactNo
             <ContinuityNoteProvider initialNotes={initialContinuityNotes}>
                 <AudioPlayerProvider>
                     <SidebarProvider>
+                        <ThemeSync />
+                        <SidebarEdgeGesture />
                         <AppSidebar user={user} />
                         <SidebarInset>
                             <Navbar />

@@ -2624,6 +2624,7 @@ export const appRouter = createTRPCRouter({
         isAlpha: true,
         isDisabled: true,
         timezone: true,
+        themeMode: true,
         subscriptionPlan: true,
         subscriptionInterval: true,
         earnedTitles: true,
@@ -2830,6 +2831,24 @@ export const appRouter = createTRPCRouter({
         where: { id: ctx.userId },
         data: { timezone: input.timezone },
         select: { id: true, timezone: true },
+      });
+      return updated;
+    }),
+  // Cross-device appearance preference. The next-themes client wrapper
+  // still owns the live `.dark` class on <html> for instant feedback;
+  // this mutation persists the choice so a second browser/device boots
+  // into the same theme on next login.
+  updateThemeMode: activeUserProcedure
+    .input(
+      z.object({
+        themeMode: z.enum(['LIGHT', 'DARK', 'SYSTEM']),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const updated = await prisma.user.update({
+        where: { id: ctx.userId },
+        data: { themeMode: input.themeMode },
+        select: { id: true, themeMode: true },
       });
       return updated;
     }),
