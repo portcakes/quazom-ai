@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -67,22 +67,34 @@ export function AudioPlayerBar() {
     playlist,
   } = player;
 
-  const barRef = useRef<HTMLDivElement>(null);
-
   // Publish the bar's measured height as a CSS variable on <html>, so
   // every other page-level sticky element on the app (the lesson hero
   // compact bar, curriculum tabs strip, continuity notes panel header,
-  // …) can shift its `top` offset down by this amount. The effect runs
-  // on mount and the cleanup fires on unmount — and because the bar
-  // returns `null` when dismissed or when there's no track, "unmount"
-  // is exactly when we want the offset cleared. ResizeObserver then
-  // keeps the variable in sync as the bar's row count changes between
-  // mobile (3 rows) and desktop (2 rows).
-  useEffect(() => {
+  // …) can shift its `top` offset down by this amount.
+  //
+  // We have to use a callback ref (not useRef + useEffect) because the
+  // bar component returns `null` for its first several renders — while
+  // there is no current track or the user has dismissed the bar. A
+  // `useEffect(..., [])` would fire exactly once, at that first render,
+  // when the `<div>` doesn't exist yet (barRef.current === null), and
+  // never re-run after the bar later mounts. The callback ref instead
+  // runs on every DOM attach/detach, so the offset is always live
+  // whenever the bar is in the document and cleared the instant it
+  // leaves.
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const setBarRef = useCallback((el: HTMLDivElement | null) => {
     if (typeof window === "undefined") return;
-    const el = barRef.current;
-    if (!el) return;
     const root = document.documentElement;
+    // Tear down any prior observer first — covers detach and the case
+    // where React swaps the underlying DOM node.
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    if (!el) {
+      root.style.removeProperty("--audio-bar-offset");
+      return;
+    }
     const setOffset = (height: number) => {
       root.style.setProperty("--audio-bar-offset", `${Math.ceil(height)}px`);
     };
@@ -93,10 +105,7 @@ export function AudioPlayerBar() {
       }
     });
     ro.observe(el);
-    return () => {
-      ro.disconnect();
-      root.style.removeProperty("--audio-bar-offset");
-    };
+    observerRef.current = ro;
   }, []);
 
   // Hide entirely when there's nothing to do. The provider re-shows the
@@ -111,14 +120,14 @@ export function AudioPlayerBar() {
 
   return (
     <div
-      ref={barRef}
+      ref={setBarRef}
       // On mobile, the navbar is fixed at top-0 (h-12), so the bar
       // sticks just below it at top-12. On desktop there is no navbar
       // (the sidebar handles nav) so the bar docks to the very top of
       // the content area. z-50 keeps it above every other sticky page
       // element so it never gets painted over by lesson/curriculum
       // chrome — those elements respond to `--audio-bar-offset`
-      // (published by the effect above) to slot in below the bar.
+      // (published by `setBarRef` above) to slot in below the bar.
       className="sticky top-12 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:top-0"
       role="region"
       aria-label="Audio player"

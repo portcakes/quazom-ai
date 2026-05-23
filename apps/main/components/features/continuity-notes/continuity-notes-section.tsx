@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2Icon, ScrollIcon, ScrollTextIcon } from "lucide-react";
+import Link from "next/link";
+import {
+  Loader2Icon,
+  ScrollIcon,
+  ScrollTextIcon,
+  StickyNoteIcon,
+} from "lucide-react";
 import { useSidebar } from "@quazom-ai/ui/components/ui/sidebar";
 import { cn } from "@quazom-ai/ui/lib/utils";
 import { useContinuityNotes } from "./continuity-note-provider";
@@ -75,6 +81,22 @@ export function ContinuityNotesSection() {
             </li>
           );
         })}
+        {/* Mirror of the "See all Curricula" affordance under the
+            course list, so the sidebar always exposes a way to jump to
+            the dedicated /notes surface where both Continuity Notes and
+            the regular notes grid live. */}
+        <li className="mt-1">
+          <Link
+            href="/notes"
+            onClick={() => {
+              if (isMobile) setOpenMobile(false);
+            }}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          >
+            <StickyNoteIcon className="size-4 shrink-0" />
+            <span className="truncate">See all Notes</span>
+          </Link>
+        </li>
       </ul>
     </div>
   );
