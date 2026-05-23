@@ -54,7 +54,24 @@ export default async function NavWrapper({ children }: { children: React.ReactNo
                         <ThemeSync />
                         <SidebarEdgeGesture />
                         <AppSidebar user={user} />
-                        <SidebarInset>
+                        {/* `min-w-0` keeps SidebarInset from claiming
+                            a horizontal min-width based on its
+                            children's intrinsic min-content (otherwise
+                            the 480px continuity-note panel + the lesson
+                            page's unshrinkable buttons can push the
+                            inset wider than its flex allocation, which
+                            then overflows the page and lets the user
+                            scroll horizontally — the fixed sidebar
+                            stays put while sticky elements drift left
+                            over it). `overflow-x-clip` is a belt-and-
+                            suspenders guarantee that any internal
+                            horizontal overflow (e.g. a wide code block
+                            in a lesson) is clipped here instead of
+                            bubbling up to the body. `clip` doesn't
+                            create a scroll container, so the audio
+                            bar's sticky positioning still anchors to
+                            the viewport. */}
+                        <SidebarInset className="min-w-0 overflow-x-clip">
                             <Navbar />
                             {/* Audio player bar sits between the navbar
                                 and the main content. It's sticky inside

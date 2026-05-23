@@ -47,16 +47,20 @@ export function ContinuityNotePanel() {
   return (
     <aside
       className={cn(
-        // Mobile: anchored to the viewport but slotted below the navbar
-        // (h-12) and the audio player bar so the bar can stay sticky at
-        // the top of the screen instead of being overlapped by the
-        // panel's chrome. The `top` math pulls from `--audio-bar-offset`
-        // (published by the audio bar) so the panel header lands
-        // immediately beneath the bar; when the bar is hidden, the
-        // variable falls back to 0px and the panel just sits under the
-        // navbar — the navbar stays visible so the hamburger remains
-        // reachable.
-        "fixed inset-x-0 bottom-0 top-[calc(theme(spacing.12)_+_var(--audio-bar-offset,0px))] z-40 flex flex-col bg-background",
+        // Mobile: full-viewport overlay so the editor stays usable on
+        // phones. We deliberately keep `fixed inset-0` (the original
+        // positioning) instead of nudging `top` down — touching `top`/
+        // `inset-x`/`bottom` on this outer container caused the desktop
+        // flex layout to overflow horizontally and let the user scroll
+        // sideways past the sidebar. Instead, we push the panel's
+        // *contents* down with `pt-*` so the audio bar (sticky at
+        // `top-12`, z-50) and the navbar (`top-0`, z-30) can render in
+        // the cleared space at the top of the panel without being
+        // covered by the panel's own header. `md:pt-0` zeroes the
+        // padding on desktop where the panel slots in below the audio
+        // bar via `md:top-[var(--audio-bar-offset)]` and there's no
+        // mobile navbar to step around.
+        "fixed inset-0 z-40 flex flex-col bg-background pt-[calc(3rem_+_var(--audio-bar-offset,0px))] md:pt-0",
         // md+: sticky to the top of the viewport so the panel's header,
         // title input, and editor toolbar remain visible while the page on
         // the left continues to scroll. `self-start` opts the panel out of
@@ -66,7 +70,7 @@ export function ContinuityNotePanel() {
         // requires a constrained height to "stick". The `top` and
         // `height` math both pull from `--audio-bar-offset` so the
         // panel slots in below the bar instead of being painted over.
-        "md:sticky md:inset-auto md:top-[var(--audio-bar-offset,0px)] md:z-auto md:h-[calc(100svh_-_var(--audio-bar-offset,0px))] md:self-start md:w-[480px] md:shrink-0 md:border-l md:border-border",
+        "md:sticky md:top-[var(--audio-bar-offset,0px)] md:z-auto md:h-[calc(100svh_-_var(--audio-bar-offset,0px))] md:self-start md:w-[480px] md:shrink-0 md:border-l md:border-border",
       )}
       aria-label="Continuity Note editor"
     >

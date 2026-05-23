@@ -4,12 +4,25 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTRPC } from "@/trpc/client";
+
+// Persist the currently-open note id across hard reloads. The panel is
+// driven entirely from component state (we intentionally don't put it
+// in the URL — see provider doc comment), so without this localStorage
+// hook the editor closes on every refresh even though navigations
+// within the SPA preserve it.
+const ACTIVE_NOTE_STORAGE_KEY = "quazom.continuity-notes.active-id";
+
+type ActiveNoteUpdater =
+  | string
+  | null
+  | ((prev: string | null) => string | null);
 
 // Mirrors the JSON shape the listContinuityNotes tRPC procedure produces —
 // Date columns become ISO strings on the wire because the client has no
@@ -55,7 +68,45 @@ type Props = {
 export function ContinuityNoteProvider({ initialNotes, children }: Props) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  // Raw setter is kept private; every caller goes through `setActiveNoteId`
+  // below so the localStorage mirror stays in lockstep.
+  const [activeNoteId, _setActiveNoteId] = useState<string | null>(null);
+
+  const setActiveNoteId = useCallback((updater: ActiveNoteUpdater) => {
+    _setActiveNoteId((prev) => {
+      const next =
+        typeof updater === "function" ? updater(prev) : updater;
+      if (typeof window !== "undefined") {
+        try {
+          if (next) {
+            window.localStorage.setItem(ACTIVE_NOTE_STORAGE_KEY, next);
+          } else {
+            window.localStorage.removeItem(ACTIVE_NOTE_STORAGE_KEY);
+          }
+        } catch {
+          // Privacy mode / quota — non-fatal. The panel simply won't
+          // auto-reopen on the next reload.
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  // Restore the last-open note on mount. We deliberately don't seed
+  // useState via a lazy initializer because that would hydration-
+  // mismatch: the server has no localStorage and would render the panel
+  // closed, while the client's first render would already have read the
+  // saved id and rendered it open. Doing the read in an effect means
+  // the panel pops in one render after hydration, which is invisible.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem(ACTIVE_NOTE_STORAGE_KEY);
+      if (stored) _setActiveNoteId(stored);
+    } catch {
+      // Privacy mode — the editor just won't auto-reopen.
+    }
+  }, []);
 
   const notesQuery = useQuery(
     trpc.listContinuityNotes.queryOptions(undefined, {
@@ -63,6 +114,18 @@ export function ContinuityNoteProvider({ initialNotes, children }: Props) {
       staleTime: 30_000,
     }),
   );
+
+  // Guard against a stale persisted id that points at a note the user
+  // can no longer see (deleted on another device, or the wrong user
+  // signed in). Once the notes list lands, clear the active id if it
+  // isn't in the list — the wrapped setter also flushes localStorage.
+  useEffect(() => {
+    if (!activeNoteId) return;
+    if (notesQuery.isLoading) return;
+    if (!notesQuery.data) return;
+    if (notesQuery.data.some((note) => note.id === activeNoteId)) return;
+    setActiveNoteId(null);
+  }, [activeNoteId, notesQuery.data, notesQuery.isLoading, setActiveNoteId]);
 
   const createMutation = useMutation(
     trpc.createContinuityNote.mutationOptions({
