@@ -31,6 +31,7 @@ import {
 import { Input } from "@quazom-ai/ui/components/ui/input";
 import { Label } from "@quazom-ai/ui/components/ui/label";
 import { Spinner } from "@quazom-ai/ui/components/ui/spinner";
+import type { ThemeMode } from "@quazom-ai/db/enums";
 import { useTRPC } from "@/trpc/client";
 import { DisableAccountDialog } from "./disable-account-dialog";
 import { DeleteAccountDialog } from "./delete-account-dialog";
@@ -63,6 +64,7 @@ type Props = {
     avatarUrl: string | null;
     isAlpha: boolean;
     timezone: string;
+    themeMode: ThemeMode;
   };
 };
 
@@ -80,12 +82,13 @@ export function SettingsView({ initialUser }: Props) {
       email: initialUser.email,
       image: initialUser.avatarUrl,
       isAlpha: initialUser.isAlpha,
-      subscriptionPlan: null,
-      subscriptionInterval: null,
-      earnedTitles: [],
-      selectedTitle: null,
+      subscriptionPlan: null as string | null,
+      subscriptionInterval: null as string | null,
+      earnedTitles: [] as string[],
+      selectedTitle: null as string | null,
       isDisabled: false,
       timezone: initialUser.timezone,
+      themeMode: initialUser.themeMode,
     },
   });
   const profile = profileQuery.data;

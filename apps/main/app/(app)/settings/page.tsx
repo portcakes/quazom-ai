@@ -34,6 +34,7 @@ export default async function SettingsPage() {
             avatarUrl: user.avatarUrl,
             isAlpha: user.isAlpha,
             timezone: user.timezone,
+            themeMode: user.themeMode,
           }}
         />
       </section>
