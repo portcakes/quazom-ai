@@ -11,14 +11,17 @@ import { createHash } from "node:crypto";
  * make the bytes playable in a browser via a normal `<audio>` element.
  */
 
-// `gemini-2.5-flash-preview-tts` is the cheapest, lowest-latency single-
-// speaker TTS model on the public Gemini API. It returns 16-bit signed
-// little-endian PCM at 24kHz mono — see the `audio/L16;codec=pcm;rate=24000`
-// `mimeType` on the response. We hard-code those parameters into the WAV
-// header below; if you swap to another voice/model and the rate changes,
-// re-derive the header from the response `mimeType` instead of trusting
-// these constants.
-const TTS_MODEL = "gemini-2.5-flash-preview-tts";
+// `gemini-2.5-pro-preview-tts` is the higher-quality single-speaker TTS
+// model on the public Gemini API. We moved off `flash-preview-tts` because
+// its voice noticeably speeds up / degrades past ~1 minute of audio,
+// which kills overview-block playback. Pro holds tone over the full
+// 5k-char cap at the cost of higher per-call latency and price. Both
+// models return 16-bit signed little-endian PCM at 24kHz mono — see the
+// `audio/L16;codec=pcm;rate=24000` `mimeType` on the response — so the
+// WAV header math below is unchanged. If you swap to a model with a
+// different rate, re-derive the header from the response `mimeType`
+// instead of trusting these constants.
+const TTS_MODEL = "gemini-2.5-pro-preview-tts";
 const SAMPLE_RATE_HZ = 24_000;
 const SAMPLE_BITS = 16;
 const NUM_CHANNELS = 1;
