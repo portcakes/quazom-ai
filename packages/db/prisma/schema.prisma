@@ -483,6 +483,11 @@ model Discussion {
   // Array of { role: 'assistant' | 'user', content: string, createdAt: ISO }
   chatHistory          Json     @default("[]")
   isCompleted          Boolean  @default(false)
+  // True when the learner used the Skip action instead of completing the
+  // discussion organically. Skipped discussions still count toward curriculum
+  // progression (and level unlock) but render a distinct banner so the user
+  // can tell at a glance which ones they engaged with vs. skipped past.
+  wasSkipped           Boolean  @default(false)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 

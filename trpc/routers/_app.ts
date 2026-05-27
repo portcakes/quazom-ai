@@ -204,8 +204,13 @@ type DbLessonActivityType =
   | "READING"
   | "OTHER";
 
-const ALL_DB_ACTIVITY_TYPES: DbLessonActivityType[] = [
-  "VIDEO",
+// Default lesson-type set written to the curriculum row when the user
+// doesn't supply an explicit filter. VIDEO was retired in May 2026 — see
+// `VISIBLE_LESSON_TYPES` in `curriculum-lesson-types.tsx` for the rationale.
+// Existing curricula keep whatever `includedActivityTypes` they were
+// created with (we don't migrate old rows), so videos in legacy courses
+// still generate.
+const DEFAULT_DB_ACTIVITY_TYPES: DbLessonActivityType[] = [
   "QUIZ",
   "EXERCISE",
   "PROJECT",
@@ -215,13 +220,23 @@ const ALL_DB_ACTIVITY_TYPES: DbLessonActivityType[] = [
 ];
 
 // Convert AI-facing activity-type slugs into the Prisma enum values used by
-// the curriculum row. Empty / undefined input collapses to the full set so a
-// downstream generator can't accidentally be told "emit zero lesson types".
+// the curriculum row. Empty / undefined input collapses to the default set
+// so a downstream generator can't accidentally be told "emit zero lesson
+// types". Also strips VIDEO unconditionally — the lesson-type filter UI
+// hides the option, but stripping at the persistence boundary stops a
+// hand-crafted client from opting back in.
 function normaliseIncludedActivityTypes(
   types: readonly LessonActivityType[] | undefined,
 ): DbLessonActivityType[] {
-  if (!types || types.length === 0) return [...ALL_DB_ACTIVITY_TYPES];
-  const set = new Set<DbLessonActivityType>(types.map((t) => activityTypeToDb(t)));
+  if (!types || types.length === 0) return [...DEFAULT_DB_ACTIVITY_TYPES];
+  const set = new Set<DbLessonActivityType>(
+    types.map((t) => activityTypeToDb(t)).filter((t) => t !== "VIDEO"),
+  );
+  // Defensive fallback: a client that sent only VIDEO would otherwise end
+  // up with zero types, which downstream code treats as "no preference"
+  // and would re-expand to the full set (including VIDEO via Prisma's
+  // column default). Force them onto the default instead.
+  if (set.size === 0) return [...DEFAULT_DB_ACTIVITY_TYPES];
   return Array.from(set);
 }
 
@@ -1359,6 +1374,42 @@ export const appRouter = createTRPCRouter({
       });
 
       return { ok: true };
+    }),
+
+  // Skip a discussion — marks it complete + flags `wasSkipped` so the UI
+  // can render a distinct banner. Skipped discussions still count toward
+  // curriculum progression and the level-unlock gate; the only difference
+  // is that the learner didn't engage with the prompt. Idempotent: if the
+  // discussion is already complete (organic or skipped) we no-op so a
+  // double-click can't error.
+  skipDiscussion: activeUserProcedure
+    .input(z.object({ discussionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const discussion = await prisma.discussion.findUnique({
+        where: { id: input.discussionId },
+        select: {
+          id: true,
+          isCompleted: true,
+          lesson: {
+            select: {
+              module: { select: { curriculum: { select: { userId: true } } } },
+            },
+          },
+        },
+      });
+      if (!discussion || discussion.lesson.module.curriculum.userId !== ctx.userId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Discussion not found' });
+      }
+      if (discussion.isCompleted) {
+        // Already complete — nothing to do, but don't error so the UI can
+        // safely retry on a flaky network.
+        return { ok: true, alreadyComplete: true };
+      }
+      await prisma.discussion.update({
+        where: { id: discussion.id },
+        data: { isCompleted: true, wasSkipped: true },
+      });
+      return { ok: true, alreadyComplete: false };
     }),
 
   // ---------------------------------------------------------------------

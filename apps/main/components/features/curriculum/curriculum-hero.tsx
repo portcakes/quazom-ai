@@ -110,7 +110,7 @@ export function CurriculumHero({
             {kind === "CONTINUITY" ? (
               <Badge
                 variant="outline"
-                className="border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300"
+                className="border-yellow-500/40 bg-yellow-500/10 text-yellow-900 dark:text-yellow-300"
                 title="Generated from multiple sources"
               >
                 <LayersIcon className="mr-1 size-3" />

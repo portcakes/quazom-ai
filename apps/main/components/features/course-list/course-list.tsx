@@ -34,6 +34,21 @@ export function CourseList() {
         <NewCurriculumModal />
       </li>
       {courses.map((course) => (
+        course.kind === "CONTINUITY" ? (
+          <li key={course.id}>
+          <Link
+            href={`/curricula/${course.id}`}
+            onClick={handleCourseClick}
+            className="flex w-full items-center gap-2 rounded-lg bg-card px-3 py-2 text-sm ring-1 ring-foreground/10 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:ring-yellow-500/10 hover:border-yellow-500/10 hover:text-yellow-700 dark:hover:text-yellow-300"
+          >
+            <LayersIcon
+              className="size-4 shrink-0 text-yellow-600"
+              aria-label="Continuity Curriculum"
+            />
+            <span className="truncate">{course.name}</span>
+          </Link>
+        </li>
+      ) : (
         <li key={course.id}>
           <Link
             href={`/curricula/${course.id}`}
@@ -47,18 +62,13 @@ export function CourseList() {
               <Loader2Icon className="size-4 shrink-0 animate-spin text-muted-foreground" />
             ) : course.status === "FAILED" ? (
               <AlertTriangleIcon className="size-4 shrink-0 text-destructive" />
-            ) : course.kind === "CONTINUITY" ? (
-              <LayersIcon
-                className="size-4 shrink-0 text-indigo-500"
-                aria-label="Continuity Curriculum"
-              />
             ) : (
               <BookIcon className="size-4 shrink-0" />
             )}
             <span className="truncate">{course.name}</span>
           </Link>
         </li>
-      ))}
+      )))}
       {pending.map((entry) => (
         <li key={entry.tempId}>
           <div

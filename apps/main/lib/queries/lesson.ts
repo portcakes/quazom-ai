@@ -101,6 +101,10 @@ export type DiscussionDetail = {
   recommendedResources: CurriculumResource[];
   chatHistory: LessonChatMessage[];
   isCompleted: boolean;
+  /** True if the user used the Skip action instead of finishing the
+   * conversation organically. Skipped discussions still count toward
+   * curriculum completion; the flag is purely informational for the UI. */
+  wasSkipped: boolean;
 };
 
 export type LessonDetail = {
@@ -393,6 +397,7 @@ function toDiscussionDetail(d: {
   recommendedResources: unknown;
   chatHistory: unknown;
   isCompleted: boolean;
+  wasSkipped: boolean;
 }): DiscussionDetail {
   return {
     id: d.id,
@@ -402,6 +407,7 @@ function toDiscussionDetail(d: {
     recommendedResources: parseResources(d.recommendedResources),
     chatHistory: parseChatHistory(d.chatHistory),
     isCompleted: d.isCompleted,
+    wasSkipped: d.wasSkipped,
   };
 }
 

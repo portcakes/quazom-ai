@@ -5,7 +5,12 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useRealtime } from "inngest/react";
 import { toast } from "sonner";
-import { CheckCircle2Icon, Loader2Icon, SendIcon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  Loader2Icon,
+  SendIcon,
+  SkipForwardIcon,
+} from "lucide-react";
 import { Button } from "@quazom-ai/ui/components/ui/button";
 import { Textarea } from "@quazom-ai/ui/components/ui/textarea";
 import { useTRPC, useTRPCClient } from "@/trpc/client";
@@ -42,6 +47,20 @@ export function DiscussionView({ lesson, userId }: Props) {
         router.refresh();
       },
       onError: (err) => toast.error(err.message ?? "Failed to send"),
+    }),
+  );
+
+  // Skip — marks the discussion complete server-side with `wasSkipped=true`,
+  // then refreshes so the input collapses to the skipped banner. The
+  // mutation is idempotent so a stale click after the discussion already
+  // closed is a safe no-op.
+  const skip = useMutation(
+    trpc.skipDiscussion.mutationOptions({
+      onSuccess: () => {
+        toast.success("Discussion skipped");
+        router.refresh();
+      },
+      onError: (err) => toast.error(err.message ?? "Failed to skip discussion"),
     }),
   );
 
@@ -93,9 +112,13 @@ export function DiscussionView({ lesson, userId }: Props) {
   const userTurnsSoFar = discussion.chatHistory.filter((m) => m.role === "user").length;
   const userTurnsRemaining = Math.max(0, MAX_USER_TURNS - userTurnsSoFar);
   const isClosed = discussion.isCompleted;
-  const inputDisabled = isClosed || waitingForReply || send.isPending;
+  const wasSkipped = discussion.wasSkipped;
+  const inputDisabled =
+    isClosed || waitingForReply || send.isPending || skip.isPending;
   const placeholder = isClosed
-    ? "This discussion is closed."
+    ? wasSkipped
+      ? "Discussion skipped."
+      : "This discussion is closed."
     : userTurnsSoFar === 0
       ? "Share your take on the prompt… (⌘/Ctrl + Enter to send)"
       : "Follow up with one final reply… (⌘/Ctrl + Enter to send)";
@@ -110,10 +133,17 @@ export function DiscussionView({ lesson, userId }: Props) {
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-heading text-lg font-semibold">Topic</h2>
           {isClosed ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2Icon className="size-3.5" />
-              Complete
-            </span>
+            wasSkipped ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                <SkipForwardIcon className="size-3.5" />
+                Skipped
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2Icon className="size-3.5" />
+                Complete
+              </span>
+            )
           ) : (
             <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground">
               {userTurnsRemaining} {userTurnsRemaining === 1 ? "reply" : "replies"} left
@@ -164,11 +194,19 @@ export function DiscussionView({ lesson, userId }: Props) {
             </div>
           ) : null}
           {isClosed && !waitingForReply ? (
-            <div className="mt-2 flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2Icon className="size-4" />
-              Discussion complete — nicely done. You can&apos;t send any more
-              messages here.
-            </div>
+            wasSkipped ? (
+              <div className="mt-2 flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                <SkipForwardIcon className="size-4" />
+                Discussion skipped. It still counts toward your curriculum
+                progress.
+              </div>
+            ) : (
+              <div className="mt-2 flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2Icon className="size-4" />
+                Discussion complete — nicely done. You can&apos;t send any more
+                messages here.
+              </div>
+            )
           ) : null}
         </div>
 
@@ -199,14 +237,36 @@ export function DiscussionView({ lesson, userId }: Props) {
             maxLength={2000}
             disabled={inputDisabled}
           />
-          <Button
-            type="submit"
-            disabled={!draft.trim() || inputDisabled}
-            className="cursor-pointer"
-          >
-            <SendIcon className="size-4" />
-            Send
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button
+              type="submit"
+              disabled={!draft.trim() || inputDisabled}
+              className="cursor-pointer"
+            >
+              <SendIcon className="size-4" />
+              Send
+            </Button>
+            {!isClosed ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={inputDisabled}
+                onClick={() => {
+                  if (isClosed) return;
+                  skip.mutate({ discussionId: discussion.id });
+                }}
+                className="cursor-pointer"
+                title="Marks the discussion complete without engaging with the prompt. Still counts toward curriculum completion."
+              >
+                {skip.isPending ? (
+                  <Loader2Icon className="size-4 animate-spin" />
+                ) : (
+                  <SkipForwardIcon className="size-4" />
+                )}
+                Skip
+              </Button>
+            ) : null}
+          </div>
         </form>
       </section>
     </div>

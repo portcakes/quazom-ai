@@ -60,7 +60,7 @@ Generate individual lessons on demand, including:
 - quizzes
 - exercises
 - projects
-- guided discussions
+- guided discussions (skippable — Skip marks the lesson complete and counts toward curriculum progression)
 
 Lessons are designed to be modular, allowing users to study at their own pace while expanding or refining topics as needed.
 
@@ -190,7 +190,11 @@ Continuity Curricula count against a separate per-plan quota:
 - Explorer: 5 per month
 - Scholar: 20 per month
 
-Users can also fine-tune which lesson types (videos, quizzes, exercises, projects, discussions, readings, other) Quazom is allowed to generate for a given curriculum, and the choice is respected when the curriculum is later extended to the next difficulty tier.
+Users can also fine-tune which lesson types (quizzes, exercises, projects, discussions, readings, other) Quazom is allowed to generate for a given curriculum, and the choice is respected when the curriculum is later extended to the next difficulty tier.
+
+The `video` lesson type was retired in May 2026 because the AI cannot reliably embed real videos — the type had degraded into a YouTube-search placeholder that felt like filler. New curricula can no longer opt into Video lessons; existing curricula that already contain Video lessons keep generating and viewing them so no learner loses progress.
+
+Discussion lessons are skippable. The chat box has a Skip button next to Send that marks the discussion as complete (with a distinct "Skipped" badge in place of "Complete") and counts it toward both curriculum progression % and the next-level unlock gate — so a learner who isn't in the mood to debate the prompt is never stuck on a single lesson.
 
 ---
 
