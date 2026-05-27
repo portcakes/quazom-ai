@@ -152,6 +152,18 @@ function NewCurriculumForm({
   const [includedTypes, setIncludedTypes] = useState<Set<LessonActivityType>>(
     new Set(VISIBLE_LESSON_TYPES),
   );
+
+  // Auto-grow the Goal textarea to fit its content. Word-wrap maintains the
+  // column width inside the 2-column grid; height grows so a long goal stays
+  // fully visible without an inner scrollbar.
+  const goalRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = goalRef.current;
+    if (!el) return;
+    // Reset before measuring so shrinking back to a shorter goal also works.
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [goal]);
   const [thesis, setThesis] = useState("");
   const [referencedNotes, setReferencedNotes] = useState<
     ContinuityNoteSelection[]
@@ -269,7 +281,7 @@ function NewCurriculumForm({
               maxLength={100}
             />
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="new-curriculum-level">Level</Label>
               <Select
@@ -288,12 +300,18 @@ function NewCurriculumForm({
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="new-curriculum-goal">Goal {sourceCount > 0 ? "(optional)" : ""}</Label>
-              <Input
+              <Textarea
                 id="new-curriculum-goal"
+                ref={goalRef}
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
                 placeholder="My goal is to…"
                 maxLength={2000}
+                rows={1}
+                // Word-wrap inside the column; height grows via the useEffect
+                // above so the whole goal stays visible. `resize-none`
+                // disables the manual drag handle since the field auto-fits.
+                className="min-h-9 resize-none overflow-hidden leading-relaxed"
               />
             </div>
           </div>
