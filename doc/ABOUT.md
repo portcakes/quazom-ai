@@ -147,11 +147,35 @@ Users can listen to their notes and resources through the audio player.
 
 ---
 
-# Upcoming Features
+## College catalog/academic resource links to curriculum generation [SHIPPED - May 27, 2026]
 
-## Continuity Curricula
+Generate curricula based on a specific college or university course catalog.
 
-Generate interdisciplinary curricula informed by a user’s notes, annotations, quotes, and prior learning history.
+Users can submit a link to a college or university course catalog, and Quazom will generate a curriculum based on the courses in the catalog.
+
+Users can submit links to specific classes or course overviews.
+
+Users can submit links to academic websites, academic journals, online doctoral dissertations, court records, and other academic resources.
+
+Users can also submit a link to a specific course syllabus.
+
+Submitted links go through Quazom's reader-mode extractor synchronously before any AI tokens are spent, so a paywalled or unreachable URL is rejected at the form rather than producing a half-extracted curriculum. Social-media domains (YouTube, Pinterest, Instagram, TikTok, Facebook, Twitter/X) are blocked outright.
+
+---
+
+## Uploaded Resources to curriculum generation [SHIPPED - May 27, 2026]
+
+Generate curricula based on the resources uploaded by the user.
+
+Users can upload PDFs of course syllabi, articles, research papers, and other learning resources directly into Quazom.
+
+Quazom will generate a curriculum based on the resources uploaded. Uploads are capped at 50 MB per file (TXT / PDF / Markdown).
+
+---
+
+## Continuity Curricula [SHIPPED - May 27, 2026]
+
+Generate interdisciplinary curricula informed by two or more sources — extra topics, uploaded files, saved links, and (optionally) a thesis statement synthesised from the user's continuity notes.
 
 Rather than isolating subjects into separate silos, Continuity Curricula are designed to encourage connected thinking and intellectual exploration across disciplines.
 
@@ -161,9 +185,18 @@ Examples might include:
 - systems engineering + anthropology
 - mathematics + music theory
 
-Each generated curriculum evolves based on the user’s discoveries, research, and growth.
+Continuity Curricula count against a separate per-plan quota:
+- FREE / ALPHA: 2 lifetime
+- Explorer: 5 per month
+- Scholar: 20 per month
+
+Users can also fine-tune which lesson types (videos, quizzes, exercises, projects, discussions, readings, other) Quazom is allowed to generate for a given curriculum, and the choice is respected when the curriculum is later extended to the next difficulty tier.
 
 ---
+
+# Upcoming Features
+
+
 
 ## Gamification
 

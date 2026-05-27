@@ -40,10 +40,13 @@ export function UsageMeter({ usage, isLoading }: Props) {
     );
   }
 
-  // Scholar (and anything else with every cap unlimited) gets a friendly
-  // "no caps apply" line instead of four meters with infinite ceilings.
+  // Scholar (and anything else with every meter unlimited) gets a friendly
+  // "no caps apply" line. Continuity curricula always carry a cap, so we
+  // never hit this branch with a real Scholar account today — but treat
+  // the row as a non-blocker for the simplified message.
   if (
     usage.curricula.limit === null &&
+    usage.continuityCurricula.limit === null &&
     usage.lessonsThisMonth.limit === null &&
     usage.discussionsThisMonth.limit === null &&
     usage.ttsThisMonth.limit === null
@@ -58,9 +61,14 @@ export function UsageMeter({ usage, isLoading }: Props) {
 
   const rows: Row[] = [
     {
-      label: "Curricula",
+      label: "Curricula (single source)",
       description: `${PLAN_LABELS[usage.plan]} plan · ${periodLabel(usage.curricula.period)}.`,
       data: usage.curricula,
+    },
+    {
+      label: "Continuity Curricula (multi-source)",
+      description: `Counts curricula generated from 2+ sources · ${periodLabel(usage.continuityCurricula.period)}.`,
+      data: usage.continuityCurricula,
     },
     {
       label: "Lesson generations this month",

@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { BookIcon, LayoutGridIcon, Loader2Icon } from "lucide-react";
+import {
+  BookIcon,
+  LayersIcon,
+  LayoutGridIcon,
+  Loader2Icon,
+  AlertTriangleIcon,
+} from "lucide-react";
 import { useSidebar } from "@quazom-ai/ui/components/ui/sidebar";
 import { useCourseList } from "./course-list-provider";
 import NewCurriculumModal from "../new-curriculum-modal";
@@ -34,7 +40,21 @@ export function CourseList() {
             onClick={handleCourseClick}
             className="flex w-full items-center gap-2 rounded-lg bg-card px-3 py-2 text-sm ring-1 ring-foreground/10 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           >
-            <BookIcon className="size-4 shrink-0" />
+            {/* Status decorations override the default book icon — a tiny
+                spinner for in-flight rows, a warning for failed ones, and a
+                stacked-layers glyph for continuity curricula. */}
+            {course.status === "PENDING" ? (
+              <Loader2Icon className="size-4 shrink-0 animate-spin text-muted-foreground" />
+            ) : course.status === "FAILED" ? (
+              <AlertTriangleIcon className="size-4 shrink-0 text-destructive" />
+            ) : course.kind === "CONTINUITY" ? (
+              <LayersIcon
+                className="size-4 shrink-0 text-indigo-500"
+                aria-label="Continuity Curriculum"
+              />
+            ) : (
+              <BookIcon className="size-4 shrink-0" />
+            )}
             <span className="truncate">{course.name}</span>
           </Link>
         </li>

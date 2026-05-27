@@ -2,15 +2,20 @@ import { inngest } from "./client";
 import { userChannel } from "./channels";
 import {
   assessmentLengthForLevel,
+  buildContinuityPromptBody,
   curriculumSchema,
+  dbToActivityType,
   exerciseQuestionsOnlySchema,
+  formatActivityTypesForPrompt,
   lessonGenerationSchema,
   levelExtensionSchema,
   modulesBackfillSchema,
   nextCurriculumLevel,
   quizQuestionsOnlySchema,
   submissionFeedbackSchema,
+  thesisGenerationSchema,
   activityTypeToDb,
+  type ContinuityPromptSource,
   type LessonActivityType,
   type QuizQuestion,
 } from "./schemas";
@@ -22,114 +27,599 @@ import { recordAiUsage } from "./ai-usage";
 const google = createGoogleGenerativeAI();
 const MODEL = "gemini-2.5-flash-lite";
 
+// Strip HTML tags + collapse whitespace. Used when feeding rich-text
+// continuity notes (TipTap HTML) into the thesis prompt — the model
+// reasons just as well on plaintext and we avoid wasting tokens on
+// `<p style="..."` noise.
+function htmlToPlaintext(html: string): string {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>(?!\n)/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// Load the pre-created Curriculum row + attached sources + extracted source
+// content. The tRPC layer inserts the row in PENDING before firing the
+// event, so by the time we run there's always a row to update. Shared by
+// the single-source and continuity-source paths.
+async function loadCurriculumWithSources(
+  curriculumId: string,
+  userId: string,
+) {
+  const row = await prisma.curriculum.findUnique({
+    where: { id: curriculumId },
+    select: {
+      id: true,
+      userId: true,
+      subject: true,
+      level: true,
+      goal: true,
+      kind: true,
+      thesis: true,
+      includedActivityTypes: true,
+      sources: {
+        orderBy: { order: "asc" },
+        select: {
+          id: true,
+          kind: true,
+          order: true,
+          topicText: true,
+          resourceId: true,
+          continuityNoteId: true,
+          resource: {
+            select: {
+              id: true,
+              kind: true,
+              title: true,
+              url: true,
+              fileType: true,
+              content: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!row) throw new Error(`Curriculum ${curriculumId} not found`);
+  if (row.userId !== userId) {
+    throw new Error("Curriculum does not belong to the requesting user");
+  }
+  return row;
+}
+
+// Translate the persisted CurriculumSource rows into the prompt-ready
+// shape used by `buildContinuityPromptBody`. Sources without extracted
+// content (e.g. a resource where extraction was deferred and never ran)
+// are skipped — the tRPC pre-flight is meant to catch this, but if a row
+// slips through we'd rather generate a curriculum from what we have than
+// crash the whole job.
+function sourcesToPromptParts(
+  sources: Awaited<ReturnType<typeof loadCurriculumWithSources>>["sources"],
+): ContinuityPromptSource[] {
+  const out: ContinuityPromptSource[] = [];
+  for (const source of sources) {
+    if (source.kind === "TOPIC" && source.topicText) {
+      out.push({ kind: "topic", text: source.topicText });
+      continue;
+    }
+    if (!source.resource) continue;
+    const r = source.resource;
+    if (source.kind === "LINK_RESOURCE" && r.url) {
+      out.push({
+        kind: "link",
+        title: r.title,
+        url: r.url,
+        content: r.content ?? "",
+      });
+    } else if (source.kind === "FILE_RESOURCE") {
+      out.push({
+        kind: "file",
+        title: r.title,
+        fileType: r.fileType ?? "FILE",
+        content: r.content ?? "",
+      });
+    }
+  }
+  return out;
+}
+
+// Common system prompt for every curriculum generator below.
+const CURRICULUM_SYSTEM_PROMPT =
+  "You are an expert instructional designer. Generate clear, well-structured personalized curricula. Be specific, actionable, and avoid filler.";
+
+// Build the prompt for a single-source curriculum. `optionalSource` is a
+// link or file resource the user attached as their one extra ingredient.
+function buildSingleSourcePrompt(args: {
+  subject: string;
+  level: string;
+  goal: string;
+  allowedActivityTypes: LessonActivityType[];
+  optionalSource: ContinuityPromptSource | null;
+}): string {
+  const sourceBlock = args.optionalSource
+    ? `\n\nSource material the learner provided (treat as authoritative context — extract its key concepts into the curriculum where relevant):\n${buildContinuityPromptBody([args.optionalSource])}`
+    : "";
+  return `Create a personalized curriculum.
+
+Subject: ${args.subject || "(none — derive from the source material)"}
+Level: ${args.level}
+Learner goal: ${args.goal || "(none — synthesise from the source material if provided)"}
+Allowed lesson activity types: ${formatActivityTypesForPrompt(args.allowedActivityTypes)}${sourceBlock}
+
+Sequence modules from foundational to advanced. Each lesson must have a concrete activityType from the allowed set above — do NOT emit any other activity type. Recommended resources should be high-quality and reputable.`;
+}
+
+// Build the prompt for a multi-source (Continuity) curriculum. Thesis is
+// rendered first when present so it acts as the model's north star; the
+// body of every source is then interleaved by `buildContinuityPromptBody`.
+function buildContinuityPrompt(args: {
+  subject: string;
+  level: string;
+  goal: string;
+  thesis: string | null;
+  sources: ContinuityPromptSource[];
+  allowedActivityTypes: LessonActivityType[];
+}): string {
+  const thesisBlock = args.thesis
+    ? `\nThesis / research direction (drive the curriculum toward this):\n"""\n${args.thesis}\n"""\n`
+    : "";
+  return `Create a personalized Continuity Curriculum from multiple sources.
+${thesisBlock}
+Subject (optional anchor): ${args.subject || "(none — derive from the sources + thesis)"}
+Level: ${args.level}
+Learner goal: ${args.goal || "(none — synthesise from the sources + thesis)"}
+Allowed lesson activity types: ${formatActivityTypesForPrompt(args.allowedActivityTypes)}
+
+Sources (treat as authoritative context — weave concepts from across them into a coherent curriculum that reflects their connections):
+
+${buildContinuityPromptBody(args.sources)}
+
+Sequence modules from foundational to advanced. Each lesson must have a concrete activityType from the allowed set above — do NOT emit any other activity type. Recommended resources should be high-quality and reputable. Where a lesson is grounded in a specific source, mention it by name in the lesson description.`;
+}
+
+// Db-side activity type union, matching the Prisma enum. Kept inline so
+// this file doesn't have to reach into the generated client just for a
+// string literal type.
+type DbActivityType =
+  | "VIDEO"
+  | "QUIZ"
+  | "EXERCISE"
+  | "PROJECT"
+  | "DISCUSSION"
+  | "READING"
+  | "OTHER";
+
+// Persist a parsed curriculum body onto the pre-existing row (created by
+// the tRPC layer in PENDING state) and pre-create Module + Lesson STUB
+// rows. Wrapped in a transaction so a half-written curriculum can never
+// leak into the UI; the row is flipped to READY in the same write.
+//
+// `allowedActivityTypesDb` is the DB-facing (UPPER_CASE) enum array; we
+// filter against the lessons the AI emitted at this layer so even if the
+// model drifts and ignores the prompt's type filter we never persist a
+// lesson the user didn't ask for.
+async function saveGeneratedCurriculum(
+  curriculumId: string,
+  parsed: {
+    title: string;
+    overview: string;
+    estimatedDuration: string;
+    objectives: unknown;
+    modules: Array<{
+      title: string;
+      summary: string;
+      objectives: string[];
+      lessons: Array<{
+        title: string;
+        description: string;
+        activityType: LessonActivityType;
+      }>;
+    }>;
+    recommendedResources: unknown;
+  },
+  defaultLevel: string,
+  allowedActivityTypesDb: readonly DbActivityType[],
+) {
+  return prisma.$transaction(async (tx) => {
+    const allowedSet = new Set<DbActivityType>(allowedActivityTypesDb);
+    const updated = await tx.curriculum.update({
+      where: { id: curriculumId },
+      data: {
+        title: parsed.title,
+        overview: parsed.overview,
+        estimatedDuration: parsed.estimatedDuration,
+        objectives: parsed.objectives as object,
+        modules: parsed.modules as unknown as object,
+        recommendedResources: parsed.recommendedResources as object,
+        raw_ai_response: JSON.stringify(parsed),
+        structured_data_json: parsed as unknown as object,
+        status: "READY",
+        statusMessage: null,
+      },
+      select: { id: true, title: true },
+    });
+
+    const initialLevel = defaultLevel.toLowerCase();
+    for (const [moduleIdx, mod] of parsed.modules.entries()) {
+      const moduleId = crypto.randomUUID();
+      await tx.module.create({
+        data: {
+          id: moduleId,
+          curriculumId,
+          title: mod.title,
+          summary: mod.summary,
+          order: moduleIdx + 1,
+          level: initialLevel,
+          objectives: mod.objectives,
+        },
+      });
+
+      const filtered =
+        allowedActivityTypesDb.length === 0
+          ? mod.lessons
+          : mod.lessons.filter((l) =>
+              // Defensive: even when the prompt forbids it the model can drift,
+              // so we drop any lesson whose activityType isn't in the filter
+              // before persisting. Empty allowed set means "no filter".
+              allowedSet.has(activityTypeToDb(l.activityType)),
+            );
+      if (filtered.length === 0) continue;
+
+      await tx.lesson.createMany({
+        data: filtered.map((lesson, lessonIdx) => ({
+          id: crypto.randomUUID(),
+          moduleId,
+          title: lesson.title,
+          description: lesson.description,
+          activityType: activityTypeToDb(lesson.activityType),
+          order: lessonIdx + 1,
+          status: "STUB",
+        })),
+      });
+    }
+
+    return updated;
+  });
+}
+
 // --------------------------------------------------------------------------
 // createCurriculum
 //
-// Generates the curriculum body, then pre-creates Module and Lesson STUB rows
-// so each lesson in the curriculum has a stable id/url. Lessons stay in STUB
-// status until the user clicks "Generate Lesson" on the curriculum page.
+// Generates a single-source curriculum from a pre-existing PENDING row.
+// The tRPC layer mints the Curriculum + any CurriculumSource rows up
+// front (so source ownership / extraction / quota are checked before any
+// AI tokens are spent); this function loads them, runs the model, and
+// flips the row to READY (or FAILED).
 // --------------------------------------------------------------------------
 export const createCurriculum = inngest.createFunction(
   { id: "process-curriculum", triggers: { event: "app/curriculum.created" } },
   async ({ event, step }) => {
-    const result = await step.ai.wrap("gemini-generate-curriculum", generateObject, {
-      model: google(MODEL),
-      schema: curriculumSchema,
-      system:
-        "You are an expert instructional designer. Generate clear, well-structured personalized curricula. Be specific, actionable, and avoid filler.",
-      prompt: `Create a personalized curriculum.
+    const { id, userId } = event.data;
+    try {
+      const curriculumRow = await step.run("load-curriculum", () =>
+        loadCurriculumWithSources(id, userId),
+      );
 
-Subject: ${event.data.subject}
-Level: ${event.data.level}
-Learner goal: ${event.data.goal}
+      const promptSources = sourcesToPromptParts(curriculumRow.sources);
+      // Single-source curricula carry at most one prompt-ready source — extras
+      // shouldn't happen (the tRPC layer routes 2+ to the continuity event)
+      // but be defensive and grab the first one if it does.
+      const optionalSource = promptSources[0] ?? null;
 
-Sequence modules from foundational to advanced. Each lesson must have a concrete activityType. Recommended resources should be high-quality and reputable.`,
-    });
+      const allowedActivityTypesDb = curriculumRow.includedActivityTypes;
+      // The prompt builders render lower-case AI-facing names because that's
+      // what the curriculum schema accepts. Convert here at the boundary.
+      const allowedActivityTypesAi = allowedActivityTypesDb.map((t) =>
+        dbToActivityType(t),
+      );
+      const result = await step.ai.wrap(
+        "gemini-generate-curriculum",
+        generateObject,
+        {
+          model: google(MODEL),
+          schema: curriculumSchema,
+          system: CURRICULUM_SYSTEM_PROMPT,
+          prompt: buildSingleSourcePrompt({
+            subject: curriculumRow.subject,
+            level: curriculumRow.level,
+            goal: curriculumRow.goal,
+            allowedActivityTypes: allowedActivityTypesAi,
+            optionalSource,
+          }),
+        },
+      );
 
-    await step.run("record-curriculum-usage", () =>
-      recordAiUsage({
-        userId: event.data.userId,
-        kind: "CURRICULUM",
-        model: MODEL,
-        result,
-        resourceId: event.data.id,
-      }),
-    );
+      await step.run("record-curriculum-usage", () =>
+        recordAiUsage({
+          userId,
+          kind: "CURRICULUM",
+          model: MODEL,
+          result,
+          resourceId: id,
+        }),
+      );
 
-    // step.ai.wrap serializes through JSON, so the schema generic is lost.
-    // Re-parse to recover the typed Curriculum and validate at runtime.
-    const curriculum = curriculumSchema.parse(
-      (result as { object: unknown }).object,
-    );
+      const curriculum = curriculumSchema.parse(
+        (result as { object: unknown }).object,
+      );
 
-    const saved = await step.run("save-curriculum-and-stubs", async () => {
-      // Single transaction: write the curriculum row and pre-create Module +
-      // Lesson STUBs so the UI can link to each lesson immediately.
-      return prisma.$transaction(async (tx) => {
-        const created = await tx.curriculum.create({
-          data: {
-            id: event.data.id,
-            userId: event.data.userId,
-            title: curriculum.title,
-            subject: event.data.subject,
-            level: event.data.level,
-            goal: event.data.goal,
-            overview: curriculum.overview,
-            estimatedDuration: curriculum.estimatedDuration,
-            objectives: curriculum.objectives,
-            modules: curriculum.modules,
-            recommendedResources: curriculum.recommendedResources,
-            raw_ai_response: JSON.stringify(curriculum),
-            structured_data_json: curriculum,
-          },
-          select: { id: true, title: true },
-        });
+      const saved = await step.run("save-curriculum-and-stubs", () =>
+        saveGeneratedCurriculum(
+          id,
+          curriculum,
+          curriculum.level ?? curriculumRow.level ?? "beginner",
+          allowedActivityTypesDb,
+        ),
+      );
 
-        // Build Module + Lesson stubs in deterministic order. Every module
-        // in the initial batch inherits the curriculum's level so the
-        // "Generate next level" button starts at the right tier.
-        const initialLevel = (curriculum.level ?? event.data.level ?? "beginner")
-          .toLowerCase();
-        for (const [moduleIdx, mod] of curriculum.modules.entries()) {
-          const moduleId = crypto.randomUUID();
-          await tx.module.create({
-            data: {
-              id: moduleId,
-              curriculumId: created.id,
-              title: mod.title,
-              summary: mod.summary,
-              order: moduleIdx + 1,
-              level: initialLevel,
-              objectives: mod.objectives,
-            },
+      await step.realtime.publish(
+        "publish-curriculum-ready",
+        userChannel(userId).curriculumReady,
+        { id: saved.id, title: saved.title },
+      );
+
+      return { curriculumId: saved.id, title: saved.title };
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Generation failed";
+      // Flip the row to FAILED so the detail page can render a retry CTA.
+      // We swallow this update's error — the outer throw still surfaces in
+      // the Inngest dashboard for ops triage.
+      await step.run("mark-curriculum-failed", async () => {
+        try {
+          await prisma.curriculum.update({
+            where: { id },
+            data: { status: "FAILED", statusMessage: message },
           });
-
-          if (mod.lessons.length === 0) continue;
-
-          await tx.lesson.createMany({
-            data: mod.lessons.map((lesson, lessonIdx) => ({
-              id: crypto.randomUUID(),
-              moduleId,
-              title: lesson.title,
-              description: lesson.description,
-              activityType: activityTypeToDb(lesson.activityType),
-              order: lessonIdx + 1,
-              status: "STUB",
-            })),
-          });
+        } catch (innerErr) {
+          console.error(
+            "[createCurriculum] failed to mark curriculum FAILED",
+            innerErr,
+          );
         }
-
-        return created;
       });
-    });
+      await step.realtime.publish(
+        "publish-curriculum-failed",
+        userChannel(userId).curriculumFailed,
+        { id, message },
+      );
+      throw err;
+    }
+  },
+);
 
-    await step.realtime.publish(
-      "publish-curriculum-ready",
-      userChannel(event.data.userId).curriculumReady,
-      { id: saved.id, title: saved.title },
-    );
+// --------------------------------------------------------------------------
+// createContinuityCurriculum
+//
+// Multi-source (Continuity) variant. Reads the pre-created Curriculum row
+// with its CurriculumSource rows, builds a prompt that includes every
+// source's extracted body (capped via `buildContinuityPromptBody`) plus
+// the optional thesis, and persists the result the same way the single-
+// source flow does. Tracked as a separate AiUsageKind so per-feature spend
+// stays auditable.
+// --------------------------------------------------------------------------
+export const createContinuityCurriculum = inngest.createFunction(
+  {
+    id: "process-continuity-curriculum",
+    triggers: { event: "app/curriculum.continuity_created" },
+  },
+  async ({ event, step }) => {
+    const { id, userId } = event.data;
+    try {
+      const curriculumRow = await step.run("load-curriculum", () =>
+        loadCurriculumWithSources(id, userId),
+      );
 
-    return { curriculumId: saved.id, title: saved.title };
+      const promptSources = sourcesToPromptParts(curriculumRow.sources);
+      if (promptSources.length === 0) {
+        throw new Error(
+          "Continuity curriculum has no usable sources to generate from",
+        );
+      }
+
+      const allowedActivityTypesDb = curriculumRow.includedActivityTypes;
+      const allowedActivityTypesAi = allowedActivityTypesDb.map((t) =>
+        dbToActivityType(t),
+      );
+      const result = await step.ai.wrap(
+        "gemini-generate-continuity-curriculum",
+        generateObject,
+        {
+          model: google(MODEL),
+          schema: curriculumSchema,
+          system: CURRICULUM_SYSTEM_PROMPT,
+          prompt: buildContinuityPrompt({
+            subject: curriculumRow.subject,
+            level: curriculumRow.level,
+            goal: curriculumRow.goal,
+            thesis: curriculumRow.thesis,
+            sources: promptSources,
+            allowedActivityTypes: allowedActivityTypesAi,
+          }),
+        },
+      );
+
+      await step.run("record-continuity-curriculum-usage", () =>
+        recordAiUsage({
+          userId,
+          kind: "CURRICULUM_CONTINUITY",
+          model: MODEL,
+          result,
+          resourceId: id,
+        }),
+      );
+
+      const curriculum = curriculumSchema.parse(
+        (result as { object: unknown }).object,
+      );
+
+      const saved = await step.run("save-continuity-curriculum-and-stubs", () =>
+        saveGeneratedCurriculum(
+          id,
+          curriculum,
+          curriculum.level ?? curriculumRow.level ?? "beginner",
+          allowedActivityTypesDb,
+        ),
+      );
+
+      await step.realtime.publish(
+        "publish-curriculum-ready",
+        userChannel(userId).curriculumReady,
+        { id: saved.id, title: saved.title },
+      );
+
+      return { curriculumId: saved.id, title: saved.title };
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Generation failed";
+      await step.run("mark-continuity-curriculum-failed", async () => {
+        try {
+          await prisma.curriculum.update({
+            where: { id },
+            data: { status: "FAILED", statusMessage: message },
+          });
+        } catch (innerErr) {
+          console.error(
+            "[createContinuityCurriculum] failed to mark curriculum FAILED",
+            innerErr,
+          );
+        }
+      });
+      await step.realtime.publish(
+        "publish-curriculum-failed",
+        userChannel(userId).curriculumFailed,
+        { id, message },
+      );
+      throw err;
+    }
+  },
+);
+
+// --------------------------------------------------------------------------
+// generateThesisFromContinuityNotes
+//
+// Fired from the "Generate from continuity notes" button in the new
+// curriculum modal. Loads N continuity notes, strips them to plaintext,
+// runs the model with `thesisGenerationSchema`, then publishes the
+// result to the modal via the `thesisReady` realtime topic. The modal
+// listens with the `requestId` so two concurrent generations can't clobber
+// each other.
+// --------------------------------------------------------------------------
+type GenerateThesisEvent = {
+  data: {
+    requestId: string;
+    userId: string;
+    noteIds: string[];
+    subject?: string | null;
+    goal?: string | null;
+  };
+};
+
+export const generateThesisFromContinuityNotes = inngest.createFunction(
+  {
+    id: "generate-thesis-from-continuity-notes",
+    triggers: { event: "app/thesis.generate" },
+  },
+  async ({
+    event,
+    step,
+  }: {
+    event: GenerateThesisEvent;
+    step: Parameters<Parameters<typeof inngest.createFunction>[1]>[0]["step"];
+  }) => {
+    const { requestId, userId, noteIds, subject, goal } = event.data;
+    try {
+      const notes = await step.run("load-continuity-notes", async () => {
+        if (noteIds.length === 0) {
+          throw new Error("No continuity notes selected");
+        }
+        const rows = await prisma.continuityNote.findMany({
+          where: { id: { in: noteIds }, userId },
+          select: { id: true, title: true, content: true },
+        });
+        if (rows.length === 0) {
+          throw new Error("None of the selected notes are accessible");
+        }
+        return rows;
+      });
+
+      const noteBlocks = (
+        notes as Array<{ id: string; title: string | null; content: string }>
+      )
+        .map((n, idx) => {
+          const title = n.title?.trim() || `Untitled note ${idx + 1}`;
+          const text = htmlToPlaintext(n.content).slice(0, 8000);
+          return `### Note ${idx + 1}: ${title}\n${text}`;
+        })
+        .join("\n\n---\n\n");
+
+      const result = await step.ai.wrap(
+        "gemini-generate-thesis-from-notes",
+        generateObject,
+        {
+          model: google(MODEL),
+          schema: thesisGenerationSchema,
+          system:
+            "You synthesise a learner's research-style notes into a single, well-formed thesis statement that can anchor a multi-source curriculum. Output 1-3 sentences max — no preamble, no headings.",
+          prompt: `The learner is about to generate a Continuity Curriculum from multiple sources. Read their continuity notes below and produce a single thesis statement that captures the central argument or research direction they appear to be building toward.
+
+${subject ? `Anchoring subject (optional): ${subject}\n` : ""}${goal ? `Learner goal (optional): ${goal}\n` : ""}
+Continuity notes:
+
+${noteBlocks}
+
+Return exactly one thesis statement in the structured response — concise, specific, and free of "the user is interested in" framing.`,
+        },
+      );
+
+      await step.run("record-thesis-usage", () =>
+        recordAiUsage({
+          userId,
+          kind: "CURRICULUM_THESIS",
+          model: MODEL,
+          result,
+          resourceId: requestId,
+        }),
+      );
+
+      const parsed = thesisGenerationSchema.parse(
+        (result as { object: unknown }).object,
+      );
+
+      await step.realtime.publish(
+        "publish-thesis-ready",
+        userChannel(userId).thesisReady,
+        { requestId, thesis: parsed.thesis.trim() },
+      );
+
+      return { requestId, thesis: parsed.thesis.trim() };
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Thesis generation failed";
+      await step.realtime.publish(
+        "publish-thesis-failed",
+        userChannel(userId).thesisFailed,
+        { requestId, message },
+      );
+      throw err;
+    }
   },
 );
 
@@ -805,6 +1295,11 @@ export const extendCurriculumLevel = inngest.createFunction(
           level: true,
           goal: true,
           overview: true,
+          // The lesson-type filter the user picked at creation time also
+          // applies when we extend the curriculum into the next tier — a
+          // learner who deselected "discussion" lessons at creation
+          // doesn't want them showing up only at the advanced level.
+          includedActivityTypes: true,
           curriculumModules: {
             orderBy: [{ order: "asc" }, { createdAt: "asc" }],
             select: {
@@ -845,6 +1340,11 @@ export const extendCurriculumLevel = inngest.createFunction(
       .map((m: { title: string; summary: string }) => `- ${m.title}: ${m.summary}`)
       .join("\n");
 
+    const allowedActivityTypesDb =
+      curriculum.includedActivityTypes as DbActivityType[];
+    const allowedActivityTypesAi = allowedActivityTypesDb.map((t) =>
+      dbToActivityType(t),
+    );
     const result = await step.ai.wrap(
       "gemini-extend-curriculum-level",
       generateObject,
@@ -859,14 +1359,15 @@ Title: ${curriculum.title}
 Subject: ${curriculum.subject}
 Original learner goal: ${curriculum.goal}
 Curriculum overview: ${curriculum.overview}
+Allowed lesson activity types: ${formatActivityTypesForPrompt(allowedActivityTypesAi)}
 
 Modules the learner has already completed (lower-tier material — do not repeat these directly):
 ${priorSummary}
 
 Constraints:
 - Output between 3 and 5 new modules at the ${targetLevel} level.
-- Each module must contain 5-8 concrete lessons with a defined activityType.
-- Vary activityType across lessons within a module so the learner is not just reading.
+- Each module must contain 5-8 concrete lessons with a defined activityType from the allowed set above — do NOT emit any other activity type.
+- Vary activityType across lessons within a module (within the allowed set) so the learner is not just reading.
 - The modules should escalate in challenge through this batch and build on the prior level.`,
       },
     );
@@ -885,6 +1386,7 @@ Constraints:
       (result as { object: unknown }).object,
     );
 
+    const allowedSet = new Set<DbActivityType>(allowedActivityTypesDb);
     const saved = await step.run("save-extended-modules", async () => {
       return prisma.$transaction(async (tx) => {
         // Re-fetch the highest existing order so the new modules sort after
@@ -911,10 +1413,20 @@ Constraints:
             },
           });
 
-          if (mod.lessons.length === 0) continue;
+          // Defensive belt-and-suspenders: even when the prompt forbids it
+          // the model can drift, so we drop any lesson whose activityType
+          // isn't in the user's allowed set before persisting. Empty
+          // allowed set means "no filter".
+          const filtered =
+            allowedActivityTypesDb.length === 0
+              ? mod.lessons
+              : mod.lessons.filter((l) =>
+                  allowedSet.has(activityTypeToDb(l.activityType)),
+                );
+          if (filtered.length === 0) continue;
 
           await tx.lesson.createMany({
-            data: mod.lessons.map((lesson, lessonIdx) => ({
+            data: filtered.map((lesson, lessonIdx) => ({
               id: crypto.randomUUID(),
               moduleId,
               title: lesson.title,
@@ -924,7 +1436,7 @@ Constraints:
               status: "STUB",
             })),
           });
-          lessonCount += mod.lessons.length;
+          lessonCount += filtered.length;
         }
 
         return { moduleCount: parsed.modules.length, lessonCount };

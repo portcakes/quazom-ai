@@ -1,11 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2Icon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  LayersIcon,
+  LinkIcon,
+  FileTextIcon,
+  TagIcon,
+  BookOpenIcon,
+} from "lucide-react";
 import { Badge } from "@quazom-ai/ui/components/ui/badge";
 import { Progress } from "@quazom-ai/ui/components/ui/progress";
 import { cn } from "@quazom-ai/ui/lib/utils";
-import type { CurriculumProgress } from "@/lib/queries/curriculum";
+import type {
+  CurriculumProgress,
+  CurriculumSourceSummary,
+} from "@/lib/queries/curriculum";
 import { SpeakTextButton } from "@/components/shared/speak-text-button";
 
 type Props = {
@@ -14,6 +24,11 @@ type Props = {
   overview: string;
   estimatedDuration: string;
   progress: CurriculumProgress;
+  // SINGLE | CONTINUITY. Optional so legacy callers don't break — defaults
+  // to SINGLE which renders without the continuity badge / sources strip.
+  kind?: "SINGLE" | "CONTINUITY";
+  sources?: CurriculumSourceSummary[];
+  thesis?: string | null;
 };
 
 // Trigger collapse once the hero's bottom passes the sticky chrome height
@@ -29,6 +44,9 @@ export function CurriculumHero({
   overview,
   estimatedDuration,
   progress,
+  kind = "SINGLE",
+  sources = [],
+  thesis = null,
 }: Props) {
   const heroRef = useRef<HTMLElement>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -89,6 +107,16 @@ export function CurriculumHero({
               {progress.currentTopLevel}
             </Badge>
             <Badge variant="outline">{estimatedDuration}</Badge>
+            {kind === "CONTINUITY" ? (
+              <Badge
+                variant="outline"
+                className="border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300"
+                title="Generated from multiple sources"
+              >
+                <LayersIcon className="mr-1 size-3" />
+                Continuity
+              </Badge>
+            ) : null}
             {progress.totalLessonCount > 0 && progress.percent >= 100 ? (
               <Badge
                 variant="outline"
@@ -102,9 +130,17 @@ export function CurriculumHero({
           <h1 className="font-heading text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
             {title}
           </h1>
+          {thesis ? (
+            <blockquote className="max-w-3xl border-l-2 border-indigo-500/40 bg-indigo-500/5 px-4 py-2 text-sm italic text-muted-foreground">
+              {thesis}
+            </blockquote>
+          ) : null}
           <p className="max-w-3xl text-base leading-relaxed text-muted-foreground sm:text-lg">
             {overview}
           </p>
+          {sources.length > 0 ? (
+            <SourceChips sources={sources} />
+          ) : null}
           {overview ? (
             <SpeakTextButton
               text={overview}
@@ -142,5 +178,75 @@ export function CurriculumHero({
         </div>
       </section>
     </>
+  );
+}
+
+// Inline chip strip listing the sources used to generate this curriculum.
+// Links open the resource in a new tab; topics and continuity-note
+// references render as labelled badges without affordances.
+function SourceChips({ sources }: { sources: CurriculumSourceSummary[] }) {
+  return (
+    <div className="flex max-w-3xl flex-wrap items-center gap-2 pt-1 text-xs">
+      <span className="text-muted-foreground">
+        Generated from {sources.length} source
+        {sources.length === 1 ? "" : "s"}:
+      </span>
+      {sources.map((s) => {
+        if (s.kind === "TOPIC") {
+          return (
+            <span
+              key={s.id}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-foreground"
+            >
+              <TagIcon className="size-3 text-muted-foreground" />
+              {s.topicText}
+            </span>
+          );
+        }
+        if (s.kind === "CONTINUITY_NOTE") {
+          return (
+            <span
+              key={s.id}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-foreground"
+              title="Continuity note"
+            >
+              <BookOpenIcon className="size-3 text-muted-foreground" />
+              {s.continuityNoteTitle ?? "Untitled note"}
+            </span>
+          );
+        }
+        const label = s.resourceTitle ?? s.resourceDomain ?? "Source";
+        const icon =
+          s.kind === "LINK_RESOURCE" ? (
+            <LinkIcon className="size-3 text-muted-foreground" />
+          ) : (
+            <FileTextIcon className="size-3 text-muted-foreground" />
+          );
+        if (s.kind === "LINK_RESOURCE" && s.resourceUrl) {
+          return (
+            <a
+              key={s.id}
+              href={s.resourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-foreground hover:bg-accent"
+              title={s.resourceUrl}
+            >
+              {icon}
+              <span className="truncate max-w-[200px]">{label}</span>
+            </a>
+          );
+        }
+        return (
+          <span
+            key={s.id}
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-foreground"
+          >
+            {icon}
+            <span className="truncate max-w-[200px]">{label}</span>
+          </span>
+        );
+      })}
+    </div>
   );
 }

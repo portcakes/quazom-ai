@@ -345,6 +345,78 @@ export const lessonGenerationSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Continuity Curriculum + thesis generation
+// ---------------------------------------------------------------------------
+
+// Single-string thesis returned by the "generate thesis from continuity
+// notes" Inngest function. We keep it as a structured object so the AI SDK's
+// generateObject helper validates the response shape and so we can extend it
+// later (working title, recommended sources, etc.) without changing callers.
+export const thesisGenerationSchema = z.object({
+  thesis: z
+    .string()
+    .min(1)
+    .describe(
+      "A single, well-formed thesis statement (1-3 sentences) that synthesises the supplied continuity notes into a clear research direction for a multi-source curriculum.",
+    ),
+});
+export type ThesisGeneration = z.infer<typeof thesisGenerationSchema>;
+
+// Per-source content cap fed to the continuity curriculum prompt. Each
+// uploaded file or extracted link is truncated to this many characters
+// before being interleaved into the prompt so a single 200k-char source
+// can't blow the context budget for the whole call.
+export const CONTINUITY_SOURCE_CHAR_CAP = 12_000;
+// Total cap across every source after per-source truncation. Acts as a
+// belt-and-suspenders limit when the user attaches many small files.
+export const CONTINUITY_TOTAL_CHAR_CAP = 60_000;
+
+export type ContinuityPromptSource =
+  | { kind: "topic"; text: string }
+  | { kind: "link"; title: string; url: string; content: string }
+  | { kind: "file"; title: string; fileType: string; content: string };
+
+// Stitch the user's inputs into the prompt body shown to the AI. Topics
+// come first (they anchor the framing), then any extracted source text
+// labelled with its title so the model can cite it back in lesson
+// descriptions. Total character output is capped at
+// `CONTINUITY_TOTAL_CHAR_CAP` to keep token spend bounded.
+export function buildContinuityPromptBody(
+  sources: ContinuityPromptSource[],
+): string {
+  let total = 0;
+  const segments: string[] = [];
+  for (const [idx, source] of sources.entries()) {
+    let block: string;
+    if (source.kind === "topic") {
+      block = `### Source ${idx + 1} — Additional topic\n${source.text.trim()}`;
+    } else if (source.kind === "link") {
+      const body = source.content.slice(0, CONTINUITY_SOURCE_CHAR_CAP).trim();
+      block = `### Source ${idx + 1} — Link: ${source.title} (${source.url})\n${body}`;
+    } else {
+      const body = source.content.slice(0, CONTINUITY_SOURCE_CHAR_CAP).trim();
+      block = `### Source ${idx + 1} — Uploaded ${source.fileType} file: ${source.title}\n${body}`;
+    }
+    const remaining = CONTINUITY_TOTAL_CHAR_CAP - total;
+    if (remaining <= 0) break;
+    const sized = block.length > remaining ? block.slice(0, remaining) : block;
+    segments.push(sized);
+    total += sized.length;
+  }
+  return segments.join("\n\n---\n\n");
+}
+
+// Render the user's lesson-type filter into a human-readable list the model
+// can be told to respect. Falls back to the full set when the array is
+// empty so we never generate a curriculum with zero lesson types.
+export function formatActivityTypesForPrompt(
+  types: readonly LessonActivityType[],
+): string {
+  const effective = types.length > 0 ? types : [...lessonActivityTypes];
+  return effective.map((t) => `\`${t}\``).join(", ");
+}
+
+// ---------------------------------------------------------------------------
 // Submission feedback (generated when the learner submits a quiz/exercise)
 // ---------------------------------------------------------------------------
 
@@ -449,7 +521,7 @@ export const NOTE_MAX_TAGS = 12;
 export const RESOURCE_TITLE_MAX_LENGTH = 200;
 export const RESOURCE_DESCRIPTION_MAX_LENGTH = 1000;
 export const RESOURCE_URL_MAX_LENGTH = 2048;
-export const RESOURCE_FILE_MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+export const RESOURCE_FILE_MAX_BYTES = 50 * 1024 * 1024; // 50 MB
 export const RESOURCE_CONTENT_MAX_LENGTH = 200_000; // ~200k chars for extracted/cached text
 
 // Hex colours we expose to the highlight toolbar. The DB stores the enum

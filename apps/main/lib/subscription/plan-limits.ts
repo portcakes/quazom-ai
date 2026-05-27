@@ -24,6 +24,13 @@ export type Cap = {
 
 export type PlanLimits = {
   curricula: Cap;
+  /**
+   * Multi-source ("Continuity") curriculum cap. Counts independently from
+   * the single-source `curricula` cap — every plan has its own bucket of
+   * continuity generations because they run on a much larger prompt and
+   * cost significantly more tokens per call.
+   */
+  continuityCurricula: Cap;
   lessonsPerMonth: Cap;
   discussionsPerMonth: Cap;
   ttsPerMonth: Cap;
@@ -40,6 +47,7 @@ export const LIMITS_BY_PLAN: Record<EffectivePlan, PlanLimits> = {
   // can revisit alpha-specific perks in the future without a migration.
   ALPHA: {
     curricula: { limit: 5, period: "lifetime" },
+    continuityCurricula: { limit: 2, period: "lifetime" },
     lessonsPerMonth: { limit: 30, period: "month" },
     discussionsPerMonth: { limit: 10, period: "month" },
     ttsPerMonth: { limit: 10, period: "month" },
@@ -48,18 +56,21 @@ export const LIMITS_BY_PLAN: Record<EffectivePlan, PlanLimits> = {
   // never silently lose access when their alpha flag is removed.
   FREE: {
     curricula: { limit: 5, period: "lifetime" },
+    continuityCurricula: { limit: 2, period: "lifetime" },
     lessonsPerMonth: { limit: 30, period: "month" },
     discussionsPerMonth: { limit: 10, period: "month" },
     ttsPerMonth: { limit: 10, period: "month" },
   },
   EXPLORER: {
     curricula: { limit: 10, period: "month" },
+    continuityCurricula: { limit: 5, period: "month" },
     lessonsPerMonth: { limit: 100, period: "month" },
     discussionsPerMonth: { limit: 30, period: "month" },
     ttsPerMonth: { limit: 50, period: "month" },
   },
   SCHOLAR: {
     curricula: { limit: null, period: "month" },
+    continuityCurricula: { limit: 20, period: "month" },
     lessonsPerMonth: { limit: null, period: "month" },
     discussionsPerMonth: { limit: null, period: "month" },
     ttsPerMonth: { limit: null, period: "month" },
@@ -80,7 +91,10 @@ export type PlanUsageSnapshot = {
   paidPlan: PlanKey | null;
   /** Whether the user still carries the alpha grant. */
   isAlpha: boolean;
+  /** Single-source curriculum usage. */
   curricula: UsageRow;
+  /** Multi-source (Continuity) curriculum usage — separate counter. */
+  continuityCurricula: UsageRow;
   lessonsThisMonth: UsageRow;
   discussionsThisMonth: UsageRow;
   ttsThisMonth: UsageRow;
@@ -111,14 +125,38 @@ export function resolveEffectivePlan(input: {
   return "FREE";
 }
 
+// Single-source (kind=SINGLE) curriculum lifetime count. The kind filter
+// ensures continuity curricula don't double-count against the single bucket.
 export async function countCurriculaForUser(userId: string): Promise<number> {
-  return prisma.curriculum.count({ where: { userId } });
+  return prisma.curriculum.count({ where: { userId, kind: "SINGLE" } });
 }
 
+// Single-source curricula created this calendar month.
 export async function countCurriculaThisMonth(userId: string): Promise<number> {
   const since = startOfThisMonthUTC();
   return prisma.curriculum.count({
-    where: { userId, createdAt: { gte: since } },
+    where: { userId, kind: "SINGLE", createdAt: { gte: since } },
+  });
+}
+
+/**
+ * Multi-source (kind=CONTINUITY) curriculum counters. FREE / ALPHA use the
+ * lifetime variant; EXPLORER / SCHOLAR use the monthly one. We filter on
+ * kind so the per-user single-source counts remain accurate even as users
+ * mix the two flavours.
+ */
+export async function countContinuityCurriculaForUser(
+  userId: string,
+): Promise<number> {
+  return prisma.curriculum.count({ where: { userId, kind: "CONTINUITY" } });
+}
+
+export async function countContinuityCurriculaThisMonth(
+  userId: string,
+): Promise<number> {
+  const since = startOfThisMonthUTC();
+  return prisma.curriculum.count({
+    where: { userId, kind: "CONTINUITY", createdAt: { gte: since } },
   });
 }
 
@@ -202,6 +240,13 @@ export async function getPlanUsage(
     : limits.curricula.period === "lifetime"
       ? countCurriculaForUser(userId)
       : countCurriculaThisMonth(userId));
+  // Continuity curricula always count regardless of plan (SCHOLAR still
+  // has a 20/month cap), so we run the query unconditionally — there's
+  // no "unlimited" tier for this feature.
+  const continuityCount = await (limits.continuityCurricula.period ===
+  "lifetime"
+    ? countContinuityCurriculaForUser(userId)
+    : countContinuityCurriculaThisMonth(userId));
   const [lessons, discussions, tts] = await Promise.all([
     limits.lessonsPerMonth.limit === null
       ? Promise.resolve(0)
@@ -223,6 +268,7 @@ export async function getPlanUsage(
         : null,
     isAlpha: user?.isAlpha ?? false,
     curricula: buildRow(curriculaCount, limits.curricula),
+    continuityCurricula: buildRow(continuityCount, limits.continuityCurricula),
     lessonsThisMonth: buildRow(lessons, limits.lessonsPerMonth),
     discussionsThisMonth: buildRow(discussions, limits.discussionsPerMonth),
     ttsThisMonth: buildRow(tts, limits.ttsPerMonth),
@@ -235,6 +281,7 @@ export type LimitCheckArgs = {
   /** Which counter to check. */
   feature:
     | "curricula"
+    | "continuityCurricula"
     | "lessonsThisMonth"
     | "discussionsThisMonth"
     | "ttsThisMonth";
@@ -247,11 +294,13 @@ export function isOverLimit(args: LimitCheckArgs): boolean {
   const cap =
     args.feature === "curricula"
       ? limits.curricula
-      : args.feature === "lessonsThisMonth"
-        ? limits.lessonsPerMonth
-        : args.feature === "discussionsThisMonth"
-          ? limits.discussionsPerMonth
-          : limits.ttsPerMonth;
+      : args.feature === "continuityCurricula"
+        ? limits.continuityCurricula
+        : args.feature === "lessonsThisMonth"
+          ? limits.lessonsPerMonth
+          : args.feature === "discussionsThisMonth"
+            ? limits.discussionsPerMonth
+            : limits.ttsPerMonth;
   if (cap.limit === null) return false;
   return args.used >= cap.limit;
 }

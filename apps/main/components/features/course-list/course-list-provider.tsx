@@ -14,6 +14,10 @@ export type PendingCourse = {
 };
 
 type CourseListContextValue = {
+  /** Stable session user id, surfaced so other components can open their own
+   * realtime subscriptions on the same channel without re-fetching the
+   * session client-side. */
+  userId: string;
   courses: CourseSummary[];
   pending: PendingCourse[];
   /**
@@ -32,6 +36,7 @@ const CourseListContext = createContext<CourseListContextValue | null>(null);
 // per-page subscription needed for the simple "ready" → refresh case).
 const REALTIME_TOPICS = [
   "curriculumReady",
+  "curriculumFailed",
   "lessonReady",
   "lessonFailed",
   "feedbackReady",
@@ -93,6 +98,21 @@ export function CourseListProvider({
     router.refresh();
   }, [messages.byTopic.curriculumReady, router]);
 
+  // Curriculum generation failed — clear pending state, toast the message,
+  // and refresh so the detail page can render its retry shell.
+  useEffect(() => {
+    const latest = messages.byTopic.curriculumFailed;
+    if (!latest || latest.kind !== "data") return;
+    const messageKey = `${latest.runId ?? ""}:${latest.createdAt?.toISOString?.() ?? ""}`;
+    if (lastHandledRef.current.curriculumFailed === messageKey) return;
+    lastHandledRef.current.curriculumFailed = messageKey;
+
+    const data = latest.data as { id: string; message: string };
+    setPending((current) => current.filter((entry) => entry.tempId !== data.id));
+    toast.error(`Curriculum generation failed: ${data.message}`);
+    router.refresh();
+  }, [messages.byTopic.curriculumFailed, router]);
+
   // Lesson ready — refresh whichever page the user is on (lesson page picks
   // up the new content, curriculum page picks up the updated status).
   useEffect(() => {
@@ -141,13 +161,14 @@ export function CourseListProvider({
 
   const value = useMemo<CourseListContextValue>(
     () => ({
+      userId,
       courses: initialCourses,
       pending,
       totalCount: initialTotalCount,
       addPending,
       removePending,
     }),
-    [initialCourses, initialTotalCount, pending, addPending, removePending],
+    [userId, initialCourses, initialTotalCount, pending, addPending, removePending],
   );
 
   return <CourseListContext.Provider value={value}>{children}</CourseListContext.Provider>;

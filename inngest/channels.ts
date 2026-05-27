@@ -59,6 +59,32 @@ export const userChannel = channel({
         message: z.string(),
       }),
     },
+    // Fired when the curriculum row finishes generation but its Inngest
+    // function returned a parse/validation error. Lets the detail page
+    // render a retry CTA without polling the row in FAILED state forever.
+    curriculumFailed: {
+      schema: z.object({
+        id: z.string(),
+        message: z.string(),
+      }),
+    },
+    // Fired when the "generate thesis from continuity notes" call returns.
+    // The modal listens with a `requestId` so concurrent thesis generations
+    // (different note picks) don't clobber each other.
+    thesisReady: {
+      schema: z.object({
+        requestId: z.string(),
+        thesis: z.string(),
+      }),
+    },
+    // Fired when thesis generation throws so the modal can surface the
+    // failure and let the user retry or write one by hand instead.
+    thesisFailed: {
+      schema: z.object({
+        requestId: z.string(),
+        message: z.string(),
+      }),
+    },
   },
 });
 
@@ -66,10 +92,13 @@ export const userChannel = channel({
 // procedure and the UI hooks stay in sync.
 export const userChannelTopics = [
   "curriculumReady",
+  "curriculumFailed",
   "lessonReady",
   "lessonFailed",
   "feedbackReady",
   "discussionMessageReady",
   "assessmentReady",
   "assessmentFailed",
+  "thesisReady",
+  "thesisFailed",
 ] as const;

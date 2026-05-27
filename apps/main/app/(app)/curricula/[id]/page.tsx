@@ -12,13 +12,18 @@ export default async function CurriculumPage({ params }: { params: Params }) {
 
   const curriculum = await getCurriculumById(id);
 
-  // If the row isn't there yet, hand off to a client component that polls
-  // (and the layout-level realtime listener will also `router.refresh()` this
-  // server component on the curriculum-ready event). The pending component
-  // surfaces a "not found" state once it gives up, so non-owners and bad ids
-  // still see a clear failure after a timeout.
+  // Three states the page can land in:
+  //   1. No row at all (legacy race, or the user is hitting a freshly minted
+  //      id before the tRPC layer's `prisma.curriculum.create` commit) →
+  //      hand off to the pending shell which polls.
+  //   2. Row exists but status is PENDING / FAILED → render the pending
+  //      shell which handles both (and surfaces a retry button on FAILED).
+  //   3. Row is READY → render the full hero + tabs view.
   if (!curriculum) {
     return <CurriculumPending id={id} />;
+  }
+  if (curriculum.status !== "READY") {
+    return <CurriculumPending id={id} initialKind={curriculum.kind} />;
   }
 
   return (
@@ -29,6 +34,9 @@ export default async function CurriculumPage({ params }: { params: Params }) {
         overview={curriculum.overview}
         estimatedDuration={curriculum.estimatedDuration}
         progress={curriculum.progress}
+        kind={curriculum.kind}
+        sources={curriculum.sources}
+        thesis={curriculum.thesis}
       />
       <CurriculumTabs
         id={curriculum.id}

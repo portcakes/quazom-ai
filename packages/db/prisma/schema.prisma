@@ -13,20 +13,20 @@ datasource db {
 }
 
 model User {
-  id              String            @id
-  name            String
-  email           String
-  emailVerified   Boolean           @default(false)
-  image           String?
+  id                   String              @id
+  name                 String
+  email                String
+  emailVerified        Boolean             @default(false)
+  image                String?
   // Grants access to the apps/admin analytics console. Flipped manually in
   // the database — there is no UI that mints admins. Defaults to false so a
   // compromised signup flow can't escalate.
-  isAdmin         Boolean           @default(false)
+  isAdmin              Boolean             @default(false)
   // Alpha-program flag. Drives the per-user generation limits (curricula,
   // lessons, discussions) when the user has no paid subscription. Every
   // existing and new user defaults to true until the alpha period ends; a
   // paid Polar subscription supersedes alpha caps via `subscriptionPlan`.
-  isAlpha         Boolean           @default(true)
+  isAlpha              Boolean             @default(true)
   // Active paid plan slug, mirrored from the user's Polar customer state by
   // the polar webhook. NULL means no paid plan (alpha or free). Currently
   // one of: "EXPLORER", "SCHOLAR".
@@ -43,28 +43,28 @@ model User {
   // has unlocked. Earned by upgrading to a paid plan during the relevant
   // window; persisted forever once granted so a downgrade doesn't strip
   // the badge they paid to earn.
-  earnedTitles         String[]     @default([])
+  earnedTitles         String[]            @default([])
   // Currently displayed title slug — must be a member of `earnedTitles`.
   // NULL hides any title from the sidebar.
   selectedTitle        String?
   // Soft-disable. When true, the user can sign in but `requireAuth` bounces
   // them to /account-disabled where they can re-enable or sign out. Hard
   // deletes go through Better Auth + Prisma cascade and do not set this.
-  isDisabled      Boolean           @default(false)
-  disabledAt      DateTime?
+  isDisabled           Boolean             @default(false)
+  disabledAt           DateTime?
   // First-time onboarding gate. Defaults to false on signup; flips true
   // once the user finishes (or skips) the onboarding survey. `requireAuth`
   // bounces non-onboarded users to /onboarding.
-  isOnboarded     Boolean           @default(false)
+  isOnboarded          Boolean             @default(false)
   // Optional answer to the "how did you hear about Quazom?" survey shown at
   // the end of onboarding. Single-column for now; if the survey grows we'll
   // promote this to its own table.
-  referralSource  String?
+  referralSource       String?
   // IANA timezone identifier (e.g. "America/Los_Angeles"). Used to anchor
   // daily check-ins to the learner's local calendar day so a user in Tokyo
   // doesn't have to wait until lunchtime UTC for a fresh check-in to unlock.
   // Defaults to UTC; the settings page surfaces this so users can override.
-  timezone        String            @default("UTC")
+  timezone             String              @default("UTC")
   // Persisted appearance preference. Defaults to LIGHT so a brand-new
   // account always boots into the canonical paper-coloured UI; users can
   // switch to DARK or SYSTEM (follow OS) from Settings, and the choice
@@ -72,23 +72,23 @@ model User {
   // wrapper still owns the live `.dark` class on <html>; this column is
   // the cross-device source of truth that gets pushed into next-themes
   // on app boot.
-  themeMode       ThemeMode         @default(LIGHT)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  sessions        Session[]
-  accounts        Account[]
-  curricula       Curriculum[]
-  userEvaluations UserEvaluations[]
-  notes           Note[]
-  annotations     Annotation[]
-  studySchedules  StudySchedule[]
-  studySessions   StudySession[]
-  checkIns        CheckIn[]
-  aiUsage         AiUsage[]
-  resources       Resource[]
-  continuityNotes ContinuityNote[]
-  generatedAudios GeneratedAudio[]
-  audioPlaylist   AudioPlaylistItem[]
+  themeMode            ThemeMode           @default(LIGHT)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  sessions             Session[]
+  accounts             Account[]
+  curricula            Curriculum[]
+  userEvaluations      UserEvaluations[]
+  notes                Note[]
+  annotations          Annotation[]
+  studySchedules       StudySchedule[]
+  studySessions        StudySession[]
+  checkIns             CheckIn[]
+  aiUsage              AiUsage[]
+  resources            Resource[]
+  continuityNotes      ContinuityNote[]
+  generatedAudios      GeneratedAudio[]
+  audioPlaylist        AudioPlaylistItem[]
 
   @@unique([email])
   @@map("user")
@@ -151,36 +151,128 @@ model Verification {
   @@map("verification")
 }
 
+// Whether a curriculum was generated from a single subject/topic + optional
+// goal (SINGLE) or assembled from two or more sources — extra topics, uploaded
+// files, saved links, etc. (CONTINUITY). The split drives a separate quota
+// bucket because Continuity Curricula run on a much larger prompt and cost
+// significantly more tokens to generate.
+enum CurriculumKind {
+  SINGLE
+  CONTINUITY
+}
+
+// Lifecycle for a Curriculum row. Continuity (and now single-source)
+// curricula are pre-created in PENDING while the Inngest function runs so
+// the detail page has something to render and source ownership is checked
+// at creation time. READY is the terminal happy state; FAILED captures
+// generation errors so the UI can offer a retry.
+enum CurriculumStatus {
+  PENDING
+  READY
+  FAILED
+}
+
 model Curriculum {
-  id                   String               @id
-  userId               String
-  title                String
-  subject              String
-  level                String
-  goal                 String
-  overview             String
-  estimatedDuration    String
-  objectives           Json
-  modules              Json
-  recommendedResources Json
-  raw_ai_response      String
-  structured_data_json Json
-  isHidden             Boolean              @default(false)
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
-  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  curriculumModules    Module[]
-  notes                Note[]
-  studySchedule        StudySchedule?
+  id                    String               @id
+  userId                String
+  title                 String
+  // For continuity curricula with no anchoring topic, `subject` and `goal`
+  // can be empty strings — kept non-null so existing rows stay valid and
+  // every downstream consumer can rely on the column being present.
+  subject               String
+  level                 String
+  goal                  String
+  overview              String
+  estimatedDuration     String
+  objectives            Json
+  modules               Json
+  recommendedResources  Json
+  raw_ai_response       String
+  structured_data_json  Json
+  isHidden              Boolean              @default(false)
+  // SINGLE = topic + optional 1 source; CONTINUITY = 2+ sources. See enum.
+  kind                  CurriculumKind       @default(SINGLE)
+  // Lifecycle flag, see enum. Newly inserted rows from the tRPC layer start
+  // PENDING and flip to READY once the matching Inngest function finishes;
+  // legacy rows were inserted directly by Inngest and so default to READY
+  // via the migration's data-fix step.
+  status                CurriculumStatus     @default(PENDING)
+  // Optional short failure reason shown on the detail page when status is
+  // FAILED. Kept off the index so the index stays cheap.
+  statusMessage         String?
+  // Optional user-supplied (or AI-generated from continuity notes) thesis
+  // statement injected at the top of the curriculum prompt for continuity
+  // curricula. NULL for single-source curricula.
+  thesis                String?
+  // Which lesson activity types the generator is permitted to emit when
+  // building this curriculum (and when extending it to the next level).
+  // Defaults to the full set so existing tooling continues to work without
+  // a code change. Empty array is treated as "no preference" downstream so
+  // we never accidentally generate a curriculum with zero lesson types.
+  includedActivityTypes LessonActivityType[] @default([VIDEO, QUIZ, EXERCISE, PROJECT, DISCUSSION, READING, OTHER])
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  curriculumModules     Module[]
+  notes                 Note[]
+  studySchedule         StudySchedule?
   // User-attached resources (uploaded files or saved links) the user has
   // pinned to this curriculum. The AI's `recommendedResources` JSON column
   // above is a separate concept — those are model suggestions surfaced in
   // the Resources tab alongside this list of learner-owned resources.
-  resourceLinks        ResourceCurriculum[]
-  generatedAudios      GeneratedAudio[]
+  resourceLinks         ResourceCurriculum[]
+  // Inputs the user fed into the generator (topics, links, files, continuity
+  // notes). Preserved so the Sources panel on the curriculum page can list
+  // exactly what shaped the AI's output.
+  sources               CurriculumSource[]
+  generatedAudios       GeneratedAudio[]
 
   @@index([userId])
+  @@index([userId, kind])
+  @@index([status])
   @@map("curriculum")
+}
+
+// What kind of input a CurriculumSource row represents. TOPIC is a free-text
+// extra topic chip from the modal; LINK_RESOURCE / FILE_RESOURCE point at an
+// owned Resource row; CONTINUITY_NOTE references a note that was used to
+// seed the thesis (kept for provenance, not re-read at generation time).
+enum CurriculumSourceKind {
+  TOPIC
+  LINK_RESOURCE
+  FILE_RESOURCE
+  CONTINUITY_NOTE
+}
+
+// One input ingredient that shaped a Curriculum. For continuity curricula
+// there will be 2+; for single-source curricula 0 or 1. The row carries the
+// original ordering so the UI can display sources in the order the user
+// added them in the modal.
+model CurriculumSource {
+  id               String               @id
+  curriculumId     String
+  curriculum       Curriculum           @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  kind             CurriculumSourceKind
+  // 0-indexed position within the curriculum's source list as the user
+  // arranged them. Used for stable rendering only — generation does not
+  // depend on order.
+  order            Int                  @default(0)
+  // TOPIC rows: the free-text topic the user typed.
+  topicText        String?
+  // LINK_RESOURCE / FILE_RESOURCE rows: the Resource this source came from.
+  // SetNull on delete so a deleted resource leaves an orphan source row the
+  // UI can still show ("Source no longer available") rather than vanishing
+  // silently.
+  resourceId       String?
+  resource         Resource?            @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  // CONTINUITY_NOTE rows: the note id the thesis was generated from. Not a
+  // FK so a deleted note still leaves a provenance trail.
+  continuityNoteId String?
+  createdAt        DateTime             @default(now())
+
+  @@index([curriculumId])
+  @@index([resourceId])
+  @@map("curriculum_source")
 }
 
 model Module {
@@ -580,49 +672,53 @@ enum ResourceStatus {
 // many lessons via the explicit join tables below; the user's personal
 // /resources collection is just "every Resource where ownerId = me".
 model Resource {
-  id              String               @id
-  userId          String
-  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kind            ResourceKind
-  title           String
+  id                String               @id
+  userId            String
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind              ResourceKind
+  title             String
   // Optional free-form description the user types when adding the resource.
   // Capped at ~500 chars by the API; the column is unbounded.
-  description     String?
+  description       String?
   // ---------------- LINK fields ----------------
   // The exact URL the user pasted. Required for kind == LINK.
-  url             String?
+  url               String?
   // Hostname extracted from `url` (e.g. "en.wikipedia.org"). Cached so
   // /resources cards can show the source without re-parsing on every render.
-  domain          String?
+  domain            String?
   // Reader-mode extracted markdown (from @mozilla/readability). Filled in
   // lazily on first view; null until extraction succeeds. The viewer falls
   // back to the raw iframe when this is null.
-  extractedAt     DateTime?
+  extractedAt       DateTime?
   // ---------------- FILE fields ----------------
   // R2 object key (e.g. "users/{userId}/resources/{resourceId}.pdf"). Required
   // for kind == FILE and never exposed to the client — we always serve files
   // through a signed GET URL minted by the tRPC layer.
-  fileKey         String?
-  fileType        ResourceFileType?
-  fileSize        Int?
-  fileMimeType    String?
+  fileKey           String?
+  fileType          ResourceFileType?
+  fileSize          Int?
+  fileMimeType      String?
   // Original filename the user uploaded (for display + download).
-  fileName        String?
+  fileName          String?
   // ---------------- Shared ----------------
   // Cached renderable text/markdown. For TXT/MD this is the file body; for
   // LINK with extractedAt set this is the reader-mode markdown; for PDF
   // this stays null and the viewer falls back to the iframe path.
-  content         String?
-  status          ResourceStatus       @default(PENDING)
+  content           String?
+  status            ResourceStatus       @default(PENDING)
   // FAILED status comes with a short reason for the UI.
-  statusMessage   String?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  curriculumLinks ResourceCurriculum[]
-  lessonLinks     ResourceLesson[]
-  notes           Note[]
-  annotations     Annotation[]
-  generatedAudios GeneratedAudio[]
+  statusMessage     String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  curriculumLinks   ResourceCurriculum[]
+  lessonLinks       ResourceLesson[]
+  notes             Note[]
+  annotations       Annotation[]
+  generatedAudios   GeneratedAudio[]
+  // Provenance rows on curricula that were generated from this resource as
+  // an input. SetNull on the source side means deleting this resource leaves
+  // the curriculum's sources list intact with a tombstone entry.
+  curriculumSources CurriculumSource[]
 
   @@index([userId])
   @@index([userId, kind])
@@ -846,6 +942,13 @@ model CheckIn {
 enum AiUsageKind {
   CURRICULUM
   CURRICULUM_BACKFILL
+  // Multi-source (Continuity) curriculum generation. Tracked separately
+  // from the single-source CURRICULUM kind so the admin dashboard can
+  // see how much more these calls cost on average.
+  CURRICULUM_CONTINUITY
+  // Thesis statement generation from selected continuity notes — a short
+  // call but priced distinctly so the curricula totals stay clean.
+  CURRICULUM_THESIS
   LESSON
   DISCUSSION_REPLY
   SUBMISSION_FEEDBACK
@@ -953,15 +1056,15 @@ model GeneratedAudio {
 // reorder; the unique index on (userId, audioId) keeps a clip from
 // appearing twice in the same queue.
 model AudioPlaylistItem {
-  id        String         @id
-  userId    String
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  audioId   String
-  audio     GeneratedAudio @relation(fields: [audioId], references: [id], onDelete: Cascade)
+  id       String         @id
+  userId   String
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audioId  String
+  audio    GeneratedAudio @relation(fields: [audioId], references: [id], onDelete: Cascade)
   // 0-indexed order. Rewritten in bulk on reorder/remove so gaps never
   // accumulate.
-  position  Int
-  addedAt   DateTime       @default(now())
+  position Int
+  addedAt  DateTime       @default(now())
 
   @@unique([userId, audioId])
   @@index([userId, position])

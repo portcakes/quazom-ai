@@ -23,10 +23,13 @@ import {
   RESOURCE_URL_MAX_LENGTH,
   annotationColors,
   curriculumLevels,
+  lessonActivityTypes,
   nextCurriculumLevel,
   resourceFileTypes,
   resourceMimeTypes,
+  activityTypeToDb,
   type CurriculumLevel,
+  type LessonActivityType,
   type QuizQuestion,
 } from '@/inngest/schemas';
 import {
@@ -40,10 +43,16 @@ import {
 } from '@/lib/r2';
 import { extractPdfText } from '@/lib/pdf';
 import { extractArticle, safeHostname } from '@/lib/readability';
+import {
+  assertAllowedSourceUrl,
+  extractSourceContent,
+} from '@/lib/link-guardrails';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { recordAiUsage } from '@/inngest/ai-usage';
 import {
+  countContinuityCurriculaForUser,
+  countContinuityCurriculaThisMonth,
   countCurriculaForUser,
   countCurriculaThisMonth,
   countDiscussionGenerationsThisMonth,
@@ -165,6 +174,57 @@ const summarizeNoteSchema = z.object({
     ),
 });
 
+// Shared zod input for the lesson-type filter the user picks in the new
+// curriculum modal. Lower-case AI-facing names; we map to the Prisma enum at
+// the persistence boundary via `activityTypeToDb`. Empty array means "no
+// preference" — downstream code defaults that back to the full set.
+const includedActivityTypesSchema = z
+  .array(z.enum(lessonActivityTypes))
+  .max(lessonActivityTypes.length);
+
+// Cap on extra free-text "topic" chips a user can attach to a curriculum.
+// Combined with `MAX_RESOURCE_SOURCES_PER_CURRICULUM` to bound prompt size.
+const MAX_TOPICS_PER_CURRICULUM = 6;
+// Max owned-resource ids the modal can attach as sources. The continuity
+// prompt builder also caps content by character count, so this is mostly
+// belt-and-suspenders against hostile clients.
+const MAX_RESOURCE_SOURCES_PER_CURRICULUM = 10;
+// Max continuity notes the thesis generator will look at in one call.
+const MAX_CONTINUITY_NOTES_PER_THESIS = 8;
+// Maximum length of a user-written thesis. The AI-generated one is short by
+// construction (1-3 sentences) so this is mostly to bound textarea input.
+const THESIS_MAX_LENGTH = 2000;
+
+type DbLessonActivityType =
+  | "VIDEO"
+  | "QUIZ"
+  | "EXERCISE"
+  | "PROJECT"
+  | "DISCUSSION"
+  | "READING"
+  | "OTHER";
+
+const ALL_DB_ACTIVITY_TYPES: DbLessonActivityType[] = [
+  "VIDEO",
+  "QUIZ",
+  "EXERCISE",
+  "PROJECT",
+  "DISCUSSION",
+  "READING",
+  "OTHER",
+];
+
+// Convert AI-facing activity-type slugs into the Prisma enum values used by
+// the curriculum row. Empty / undefined input collapses to the full set so a
+// downstream generator can't accidentally be told "emit zero lesson types".
+function normaliseIncludedActivityTypes(
+  types: readonly LessonActivityType[] | undefined,
+): DbLessonActivityType[] {
+  if (!types || types.length === 0) return [...ALL_DB_ACTIVITY_TYPES];
+  const set = new Set<DbLessonActivityType>(types.map((t) => activityTypeToDb(t)));
+  return Array.from(set);
+}
+
 // Shared schedule input. Used by both `previewSchedule` and `upsertSchedule`.
 const scheduleInputSchema = z.object({
   curriculumId: z.string(),
@@ -198,16 +258,47 @@ export const appRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string().uuid(),
-        subject: z.string(),
-        level: z.string(),
-        goal: z.string(),
+        // Subject becomes optional when the user attached one source — the
+        // source itself can anchor the topic. We still require at least one
+        // of {subject, source} so we never run the generator on nothing.
+        subject: z.string().max(100).optional().default(''),
+        level: z.enum(curriculumLevels),
+        goal: z.string().max(2000).optional().default(''),
+        // 0 or 1 owned Resource id (validated for ownership below). Two or
+        // more sources counts as a Continuity Curriculum and must use the
+        // `createContinuityCurriculum` mutation instead.
+        resourceIds: z.array(z.string().uuid()).max(1).optional().default([]),
+        // 0 or 1 extra free-text topic chip.
+        extraTopics: z.array(z.string().min(1).max(200)).max(1).optional().default([]),
+        // Lesson-type filter (checkbox list in the modal).
+        includedActivityTypes: includedActivityTypesSchema.optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Plan-tier cost guard. SCHOLAR is unlimited so the helper short-
-      // circuits with `null`; ALPHA / FREE keep the lifetime cap; EXPLORER
-      // gets the monthly cap. Counting only kicks in when we actually have
-      // a cap to enforce.
+      // ---- Source-count sanity -----------------------------------------
+      const sourceCount = input.resourceIds.length + input.extraTopics.length;
+      if (sourceCount > 1) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message:
+            'createCurriculum accepts at most one extra source. Use createContinuityCurriculum for multi-source generation.',
+        });
+      }
+      // Require either a subject or some other source so we never generate
+      // a curriculum out of literally nothing.
+      const hasSubject = input.subject.trim().length > 0;
+      if (sourceCount === 0 && !hasSubject) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Add a subject or at least one source to create a curriculum.',
+        });
+      }
+
+      // ---- Plan-tier cost guard ---------------------------------------
+      // SCHOLAR is unlimited for single-source curricula so the helper
+      // short-circuits with `null`; ALPHA / FREE keep the lifetime cap;
+      // EXPLORER gets the monthly cap. Counting only runs when we actually
+      // have a cap to enforce.
       const user = await prisma.user.findUnique({
         where: { id: ctx.userId },
         select: { isAlpha: true, subscriptionPlan: true },
@@ -230,24 +321,399 @@ export const appRouter = createTRPCRouter({
               : ' Delete one to free up a slot.';
           throw new TRPCError({
             code: 'FORBIDDEN',
-            message: `Your plan is limited to ${cap.limit} curricula ${periodLabel}.${reset}`,
+            message: `Your plan is limited to ${cap.limit} single-source curricula ${periodLabel}.${reset}`,
           });
         }
       }
-      return await inngest.send({
+
+      // ---- Resource ownership check -----------------------------------
+      // If the user attached a resource, confirm they own it and it's READY
+      // *before* we burn AI tokens. A resource still extracting (or one
+      // that failed extraction) can't be used as a source.
+      if (input.resourceIds.length > 0) {
+        const ids = input.resourceIds;
+        const owned = await prisma.resource.findMany({
+          where: { id: { in: ids }, userId: ctx.userId },
+          select: { id: true, status: true, content: true },
+        });
+        const missing = ids.filter((id) => !owned.some((r) => r.id === id));
+        if (missing.length > 0) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'One of the attached resources is missing or not yours.',
+          });
+        }
+        const notReady = owned.filter((r) => r.status !== 'READY');
+        if (notReady.length > 0) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message:
+              "One of your attached resources isn't ready yet. Wait for the upload + extraction to finish, then try again.",
+          });
+        }
+      }
+
+      const includedActivityTypes = normaliseIncludedActivityTypes(
+        input.includedActivityTypes,
+      );
+
+      // ---- Pre-create the Curriculum row + its sources ---------------
+      // The row goes in as PENDING so the detail page can render the
+      // pending shell immediately; the Inngest function flips it to READY
+      // (or FAILED) once generation finishes.
+      await prisma.$transaction(async (tx) => {
+        await tx.curriculum.create({
+          data: {
+            id: input.id,
+            userId: ctx.userId,
+            title: input.subject || 'Generating curriculum…',
+            subject: input.subject,
+            level: input.level,
+            goal: input.goal,
+            overview: '',
+            estimatedDuration: '',
+            objectives: [],
+            modules: [],
+            recommendedResources: [],
+            raw_ai_response: '',
+            structured_data_json: {},
+            kind: 'SINGLE',
+            status: 'PENDING',
+            includedActivityTypes,
+          },
+        });
+        // Attach the optional resource source.
+        for (const [idx, resourceId] of input.resourceIds.entries()) {
+          await tx.curriculumSource.create({
+            data: {
+              id: crypto.randomUUID(),
+              curriculumId: input.id,
+              kind: 'LINK_RESOURCE',
+              // The CurriculumSourceKind enum splits LINK vs FILE for
+              // analytics, but the Inngest function dispatches off
+              // `resource.kind` so we need the right one here too.
+              order: idx,
+              resourceId,
+            },
+          });
+          // Pin the resource to the curriculum so the Resources tab shows
+          // it alongside the user's other attached resources.
+          await tx.resourceCurriculum
+            .upsert({
+              where: {
+                resourceId_curriculumId: {
+                  resourceId,
+                  curriculumId: input.id,
+                },
+              },
+              create: {
+                id: crypto.randomUUID(),
+                resourceId,
+                curriculumId: input.id,
+              },
+              update: {},
+            })
+            .catch(() => {});
+        }
+        for (const [idx, topic] of input.extraTopics.entries()) {
+          await tx.curriculumSource.create({
+            data: {
+              id: crypto.randomUUID(),
+              curriculumId: input.id,
+              kind: 'TOPIC',
+              order: input.resourceIds.length + idx,
+              topicText: topic.trim(),
+            },
+          });
+        }
+      });
+
+      // Now that the row exists with its sources, patch the LINK vs FILE
+      // kind on each CurriculumSource row to match the actual resource kind
+      // (the upsert above had to use a single enum value).
+      if (input.resourceIds.length > 0) {
+        const resources = await prisma.resource.findMany({
+          where: { id: { in: input.resourceIds } },
+          select: { id: true, kind: true },
+        });
+        for (const r of resources) {
+          await prisma.curriculumSource.updateMany({
+            where: { curriculumId: input.id, resourceId: r.id },
+            data: { kind: r.kind === 'FILE' ? 'FILE_RESOURCE' : 'LINK_RESOURCE' },
+          });
+        }
+      }
+
+      // ---- Fire the Inngest event ------------------------------------
+      await inngest.send({
         name: 'app/curriculum.created',
+        data: { id: input.id, userId: ctx.userId },
+      });
+      return { id: input.id };
+    }),
+  // -------------------------------------------------------------------
+  // createContinuityCurriculum
+  //
+  // Multi-source curriculum. Requires 2+ sources total (extra topics +
+  // resource ids), counts against the separate `continuityCurricula` quota
+  // bucket, and accepts an optional thesis statement that anchors the
+  // generated curriculum.
+  // -------------------------------------------------------------------
+  createContinuityCurriculum: activeUserProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        subject: z.string().max(100).optional().default(''),
+        level: z.enum(curriculumLevels),
+        goal: z.string().max(2000).optional().default(''),
+        thesis: z.string().max(THESIS_MAX_LENGTH).optional().default(''),
+        resourceIds: z
+          .array(z.string().uuid())
+          .max(MAX_RESOURCE_SOURCES_PER_CURRICULUM)
+          .optional()
+          .default([]),
+        extraTopics: z
+          .array(z.string().min(1).max(200))
+          .max(MAX_TOPICS_PER_CURRICULUM)
+          .optional()
+          .default([]),
+        // Continuity notes referenced (typically because the thesis was
+        // generated from them). Stored as provenance only — not re-read at
+        // generation time.
+        continuityNoteIds: z
+          .array(z.string().uuid())
+          .max(MAX_CONTINUITY_NOTES_PER_THESIS)
+          .optional()
+          .default([]),
+        includedActivityTypes: includedActivityTypesSchema.optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // ---- Source-count sanity ---------------------------------------
+      const sourceCount = input.resourceIds.length + input.extraTopics.length;
+      if (sourceCount < 2) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message:
+            'A Continuity Curriculum needs at least 2 sources (topics + resources combined).',
+        });
+      }
+
+      // ---- Plan-tier cost guard --------------------------------------
+      const user = await prisma.user.findUnique({
+        where: { id: ctx.userId },
+        select: { isAlpha: true, subscriptionPlan: true },
+      });
+      const plan = resolveEffectivePlan({
+        subscriptionPlan: user?.subscriptionPlan ?? null,
+        isAlpha: user?.isAlpha ?? false,
+      });
+      const cap = LIMITS_BY_PLAN[plan].continuityCurricula;
+      const continuityUsed =
+        cap.period === 'lifetime'
+          ? await countContinuityCurriculaForUser(ctx.userId)
+          : await countContinuityCurriculaThisMonth(ctx.userId);
+      if (isOverLimit({ plan, feature: 'continuityCurricula', used: continuityUsed })) {
+        const periodLabel = cap.period === 'lifetime' ? 'total' : 'per month';
+        const reset =
+          cap.period === 'month'
+            ? ' Resets on the 1st.'
+            : ' Upgrade your plan or delete one to free up a slot.';
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: `Your plan is limited to ${cap.limit} Continuity Curricula ${periodLabel}.${reset}`,
+        });
+      }
+
+      // ---- Resource ownership + readiness ----------------------------
+      let resources: Array<{
+        id: string;
+        kind: 'LINK' | 'FILE';
+        status: string;
+        content: string | null;
+      }> = [];
+      if (input.resourceIds.length > 0) {
+        const ids = input.resourceIds;
+        const rows = await prisma.resource.findMany({
+          where: { id: { in: ids }, userId: ctx.userId },
+          select: { id: true, kind: true, status: true, content: true },
+        });
+        const missing = ids.filter((id) => !rows.some((r) => r.id === id));
+        if (missing.length > 0) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'One of the attached resources is missing or not yours.',
+          });
+        }
+        const notReady = rows.filter((r) => r.status !== 'READY');
+        if (notReady.length > 0) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message:
+              "One of your attached resources isn't ready yet. Wait for the upload + extraction to finish, then try again.",
+          });
+        }
+        // Hard-reject: every source must have extracted content before we
+        // spend AI tokens on the prompt. The modal's "Add a link" flow
+        // uses requireExtraction=true; this is a belt-and-suspenders check
+        // for resources attached from the user's existing library.
+        const empty = rows.filter((r) => !r.content || r.content.trim().length === 0);
+        if (empty.length > 0) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message:
+              "One of your attached resources doesn't have any readable text yet. Re-extract it from the resource viewer and try again.",
+          });
+        }
+        resources = rows;
+      }
+
+      // ---- Continuity-note ownership (provenance only) ---------------
+      if (input.continuityNoteIds.length > 0) {
+        const owned = await prisma.continuityNote.count({
+          where: { id: { in: input.continuityNoteIds }, userId: ctx.userId },
+        });
+        if (owned !== input.continuityNoteIds.length) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'One of the referenced continuity notes is missing or not yours.',
+          });
+        }
+      }
+
+      const includedActivityTypes = normaliseIncludedActivityTypes(
+        input.includedActivityTypes,
+      );
+      const thesis = input.thesis.trim() || null;
+
+      // ---- Pre-create the Curriculum row + its sources ---------------
+      await prisma.$transaction(async (tx) => {
+        await tx.curriculum.create({
+          data: {
+            id: input.id,
+            userId: ctx.userId,
+            title: input.subject || 'Generating Continuity Curriculum…',
+            subject: input.subject,
+            level: input.level,
+            goal: input.goal,
+            overview: '',
+            estimatedDuration: '',
+            objectives: [],
+            modules: [],
+            recommendedResources: [],
+            raw_ai_response: '',
+            structured_data_json: {},
+            kind: 'CONTINUITY',
+            status: 'PENDING',
+            thesis,
+            includedActivityTypes,
+          },
+        });
+        let order = 0;
+        for (const resource of resources) {
+          await tx.curriculumSource.create({
+            data: {
+              id: crypto.randomUUID(),
+              curriculumId: input.id,
+              kind: resource.kind === 'FILE' ? 'FILE_RESOURCE' : 'LINK_RESOURCE',
+              order: order++,
+              resourceId: resource.id,
+            },
+          });
+          await tx.resourceCurriculum
+            .upsert({
+              where: {
+                resourceId_curriculumId: {
+                  resourceId: resource.id,
+                  curriculumId: input.id,
+                },
+              },
+              create: {
+                id: crypto.randomUUID(),
+                resourceId: resource.id,
+                curriculumId: input.id,
+              },
+              update: {},
+            })
+            .catch(() => {});
+        }
+        for (const topic of input.extraTopics) {
+          await tx.curriculumSource.create({
+            data: {
+              id: crypto.randomUUID(),
+              curriculumId: input.id,
+              kind: 'TOPIC',
+              order: order++,
+              topicText: topic.trim(),
+            },
+          });
+        }
+        for (const noteId of input.continuityNoteIds) {
+          await tx.curriculumSource.create({
+            data: {
+              id: crypto.randomUUID(),
+              curriculumId: input.id,
+              kind: 'CONTINUITY_NOTE',
+              order: order++,
+              continuityNoteId: noteId,
+            },
+          });
+        }
+      });
+
+      await inngest.send({
+        name: 'app/curriculum.continuity_created',
+        data: { id: input.id, userId: ctx.userId },
+      });
+      return { id: input.id };
+    }),
+  // -------------------------------------------------------------------
+  // generateThesisFromNotes
+  //
+  // Fires the thesis-generation Inngest function. Caller passes a
+  // `requestId` (uuid) it'll listen for on the `thesisReady` realtime
+  // topic so concurrent generations don't collide.
+  // -------------------------------------------------------------------
+  generateThesisFromNotes: activeUserProcedure
+    .input(
+      z.object({
+        requestId: z.string().uuid(),
+        continuityNoteIds: z
+          .array(z.string().uuid())
+          .min(1, 'Select at least one continuity note')
+          .max(MAX_CONTINUITY_NOTES_PER_THESIS),
+        subject: z.string().max(100).optional(),
+        goal: z.string().max(2000).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const owned = await prisma.continuityNote.count({
+        where: { id: { in: input.continuityNoteIds }, userId: ctx.userId },
+      });
+      if (owned !== input.continuityNoteIds.length) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'One of the selected notes is missing or not yours.',
+        });
+      }
+      await inngest.send({
+        name: 'app/thesis.generate',
         data: {
-          id: input.id,
+          requestId: input.requestId,
           userId: ctx.userId,
-          subject: input.subject,
-          level: input.level,
-          goal: input.goal,
+          noteIds: input.continuityNoteIds,
+          subject: input.subject ?? null,
+          goal: input.goal ?? null,
         },
       });
+      return { requestId: input.requestId };
     }),
   getCurriculum: protectedcProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      // Surface the new lifecycle + kind columns so the detail page can
+      // decide between rendering the pending shell, the failure state, or
+      // the full hero+tabs view without an extra round trip.
       return await prisma.curriculum.findFirst({
         where: { id: input.id, userId: ctx.userId },
         select: {
@@ -258,8 +724,43 @@ export const appRouter = createTRPCRouter({
           level: true,
           goal: true,
           estimatedDuration: true,
+          kind: true,
+          status: true,
+          statusMessage: true,
+          thesis: true,
         },
       });
+    }),
+  // Reset a FAILED curriculum back to PENDING and re-fire its generation
+  // event. Used by the failure-state retry button on the detail page.
+  retryCurriculum: activeUserProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const curriculum = await prisma.curriculum.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: { id: true, kind: true, status: true },
+      });
+      if (!curriculum) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Curriculum not found' });
+      }
+      if (curriculum.status !== 'FAILED') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Only failed curricula can be retried.',
+        });
+      }
+      await prisma.curriculum.update({
+        where: { id: curriculum.id },
+        data: { status: 'PENDING', statusMessage: null },
+      });
+      await inngest.send({
+        name:
+          curriculum.kind === 'CONTINUITY'
+            ? 'app/curriculum.continuity_created'
+            : 'app/curriculum.created',
+        data: { id: curriculum.id, userId: ctx.userId },
+      });
+      return { ok: true };
     }),
   setCurriculumHidden: protectedcProcedure
     .input(z.object({ id: z.string(), isHidden: z.boolean() }))
@@ -1759,24 +2260,55 @@ export const appRouter = createTRPCRouter({
           .max(RESOURCE_DESCRIPTION_MAX_LENGTH)
           .optional(),
         scope: resourceScopeSchema,
+        // When true, fetch + reader-mode extract the URL synchronously
+        // before the row is committed; on any failure (blocked domain,
+        // unreachable host, paywall, JS-only page, empty body) the
+        // mutation throws and no Resource row is created. Used by the
+        // curriculum-create flow so we never spend AI tokens on links we
+        // couldn't actually read.
+        requireExtraction: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // Block social-media domains for every link, regardless of whether
+      // extraction is required — even links the user is just saving to
+      // their library shouldn't include sources we know we won't ingest.
+      assertAllowedSourceUrl(input.url);
       const scope = await resolveResourceScope(ctx.userId, input.scope);
       const domain = safeHostname(input.url);
       const fallbackTitle = input.title?.trim() || domain || input.url;
       const id = crypto.randomUUID();
+      // requireExtraction=true: run extraction first so we can short-circuit
+      // before writing to Postgres. We only create the row if extraction
+      // succeeds, so the user never ends up with an orphan "FAILED" resource
+      // when their link is unreachable.
+      let extractedTitle: string | null = null;
+      let extractedContent: string | null = null;
+      let extractedAt: Date | null = null;
+      if (input.requireExtraction) {
+        const extracted = await extractSourceContent(input.url);
+        extractedContent = extracted.markdown.slice(0, 200_000);
+        extractedAt = new Date();
+        if (!input.title?.trim()) extractedTitle = extracted.title;
+      }
+      const finalTitle = (extractedTitle ?? fallbackTitle).slice(
+        0,
+        RESOURCE_TITLE_MAX_LENGTH,
+      );
       const resource = await prisma.resource.create({
         data: {
           id,
           userId: ctx.userId,
           kind: 'LINK',
-          title: fallbackTitle.slice(0, RESOURCE_TITLE_MAX_LENGTH),
+          title: finalTitle,
           description: input.description?.trim() || null,
           url: input.url,
           domain,
-          // Links are immediately READY because we don't gate on extraction;
-          // the viewer triggers extraction lazily on first open.
+          content: extractedContent,
+          extractedAt,
+          // Links are immediately READY: either because we just extracted
+          // them above (requireExtraction=true), or because the viewer
+          // triggers extraction lazily on first open (legacy path).
           status: 'READY',
         },
       });

@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { Badge } from "@quazom-ai/ui/components/ui/badge";
 import { Progress } from "@quazom-ai/ui/components/ui/progress";
-import { CheckCircle2Icon, ClockIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  CheckCircle2Icon,
+  ClockIcon,
+  LayersIcon,
+  Loader2Icon,
+} from "lucide-react";
 import { cn } from "@quazom-ai/ui/lib/utils";
 import type { CurriculumCardSummary } from "@/lib/queries/courses";
 
@@ -31,6 +37,33 @@ export function CurriculumCollectionCard({ curriculum }: Props) {
           <ClockIcon className="size-3" />
           {curriculum.estimatedDuration}
         </Badge>
+        {curriculum.kind === "CONTINUITY" ? (
+          <Badge
+            variant="outline"
+            className="gap-1 border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300"
+          >
+            <LayersIcon className="size-3" />
+            Continuity
+          </Badge>
+        ) : null}
+        {curriculum.status === "PENDING" ? (
+          <Badge
+            variant="outline"
+            className="gap-1 border-muted bg-muted/40 text-muted-foreground"
+          >
+            <Loader2Icon className="size-3 animate-spin" />
+            Generating
+          </Badge>
+        ) : null}
+        {curriculum.status === "FAILED" ? (
+          <Badge
+            variant="outline"
+            className="gap-1 border-destructive/40 bg-destructive/10 text-destructive"
+          >
+            <AlertTriangleIcon className="size-3" />
+            Failed
+          </Badge>
+        ) : null}
         {complete ? (
           <Badge
             variant="outline"

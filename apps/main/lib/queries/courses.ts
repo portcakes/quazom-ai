@@ -8,6 +8,12 @@ import type { LessonActivityType } from "@quazom-ai/db/enums";
 export type CourseSummary = {
   id: string;
   name: string;
+  // SINGLE | CONTINUITY. Lets the sidebar pin a small "Continuity" badge
+  // next to multi-source curricula without an extra round trip.
+  kind: "SINGLE" | "CONTINUITY";
+  // Lifecycle. PENDING entries can render a tiny spinner while Inngest
+  // works; FAILED ones can show a warning icon.
+  status: "PENDING" | "READY" | "FAILED";
 };
 
 export type CurriculumCardSummary = {
@@ -17,6 +23,8 @@ export type CurriculumCardSummary = {
   estimatedDuration: string;
   overview: string;
   isHidden: boolean;
+  kind: "SINGLE" | "CONTINUITY";
+  status: "PENDING" | "READY" | "FAILED";
   // Aggregated completion stats so the collection card can render a progress
   // bar without each card hitting the DB individually.
   completedLessonCount: number;
@@ -34,11 +42,16 @@ export async function getUserCourses(): Promise<CourseSummary[]> {
 
   const curricula = await prisma.curriculum.findMany({
     where: { userId: session.user.id, isHidden: false },
-    select: { id: true, title: true },
+    select: { id: true, title: true, kind: true, status: true },
     orderBy: { createdAt: "desc" },
   });
 
-  return curricula.map((c) => ({ id: c.id, name: c.title }));
+  return curricula.map((c) => ({
+    id: c.id,
+    name: c.title,
+    kind: c.kind,
+    status: c.status,
+  }));
 }
 
 /**
@@ -71,6 +84,8 @@ export async function getUserCurricula(): Promise<CurriculumCardSummary[]> {
       estimatedDuration: true,
       overview: true,
       isHidden: true,
+      kind: true,
+      status: true,
       curriculumModules: {
         select: {
           lessons: {
@@ -107,6 +122,8 @@ export async function getUserCurricula(): Promise<CurriculumCardSummary[]> {
       estimatedDuration: c.estimatedDuration,
       overview: c.overview,
       isHidden: c.isHidden,
+      kind: c.kind,
+      status: c.status,
       completedLessonCount: completed,
       totalLessonCount: total,
       progressPercent,
