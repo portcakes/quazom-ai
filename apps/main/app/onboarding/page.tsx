@@ -2,7 +2,8 @@ import { requireOnboardingSession } from "@/lib/auth-utils";
 import { OnboardingFlow } from "@/components/features/onboarding/onboarding-flow";
 
 export const metadata = {
-  title: "Welcome to Quazom",
+  title: "Quazom - Welcome to Quazom!",
+  description: "Welcome to Quazom! Let's get you started on your personalized learning journey.",
 };
 
 export default async function OnboardingPage() {
