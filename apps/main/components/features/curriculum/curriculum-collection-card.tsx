@@ -40,7 +40,7 @@ export function CurriculumCollectionCard({ curriculum }: Props) {
         {curriculum.kind === "CONTINUITY" ? (
           <Badge
             variant="outline"
-            className="gap-1 border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300"
+            className="gap-1 border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
           >
             <LayersIcon className="size-3" />
             Continuity
