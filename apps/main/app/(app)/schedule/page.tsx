@@ -3,6 +3,7 @@ import { SchedulePageClient } from "@/components/features/schedule/schedule-page
 
 export const metadata = {
   title: "Schedule",
+  description: "Your study schedule",
 };
 
 export default async function SchedulePage() {

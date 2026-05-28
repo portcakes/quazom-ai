@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { requireAuth } from "@/lib/auth-utils";
 import { getCurriculumById } from "@/lib/queries/curriculum";
 import { CurriculumHero } from "@/components/features/curriculum/curriculum-hero";
@@ -5,6 +6,19 @@ import { CurriculumPending } from "@/components/features/curriculum/curriculum-p
 import { CurriculumTabs } from "@/components/features/curriculum/curriculum-tabs";
 
 type Params = Promise<{ id: string }>;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Params;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const curriculum = await getCurriculumById(id);
+  return {
+    title: `Quazom - ${curriculum?.title ?? "Curriculum"}`,
+    description: curriculum?.overview ?? "Your personalized curriculum",
+  };
+}
 
 export default async function CurriculumPage({ params }: { params: Params }) {
   await requireAuth();

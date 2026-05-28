@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
@@ -6,27 +7,27 @@ import prisma from "@quazom-ai/db";
 import { getSignedDownloadUrl, r2IsConfigured } from "@/lib/r2";
 import { ResourceViewer } from "@/components/features/resources/resource-viewer";
 
-type Params = { id: string };
+type Params = Promise<{ id: string }>;
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<Params>;
-}) {
+  params: Params;
+}): Promise<Metadata> {
   const { id } = await params;
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return { title: "Resource" };
+  if (!session) return { title: "Quazom - Resource" };
   const row = await prisma.resource.findFirst({
     where: { id, userId: session.user.id },
     select: { title: true },
   });
-  return { title: row?.title ?? "Resource" };
+  return { title: `Quazom - ${row?.title ?? "Resource"}` };
 }
 
 export default async function ResourceDetailPage({
   params,
 }: {
-  params: Promise<Params>;
+  params: Params;
 }) {
   await requireAuth();
   const { id } = await params;

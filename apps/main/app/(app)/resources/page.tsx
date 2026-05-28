@@ -3,7 +3,8 @@ import { ResourcesGrid } from "@/components/features/resources/resources-grid";
 import { AudioLibrarySection } from "@/components/features/audio-player/audio-library-section";
 
 export const metadata = {
-  title: "Resources",
+  title: "Quazom - Resources",
+  description: "Your collection of resources",
 };
 
 export default async function ResourcesPage() {

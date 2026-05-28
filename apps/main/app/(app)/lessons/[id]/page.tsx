@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth-utils";
 import { getLessonById } from "@/lib/queries/lesson";
@@ -10,6 +11,19 @@ import { ProjectView } from "@/components/features/lesson/project-view";
 import { DiscussionView } from "@/components/features/lesson/discussion-view";
 
 type Params = Promise<{ id: string }>;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Params;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const lesson = await getLessonById(id);
+  return {
+    title: `Quazom - ${lesson?.title ?? "Lesson"}`,
+    description: "A lesson from a curriculum",
+  };
+}
 
 export default async function LessonPage({ params }: { params: Params }) {
   const session = await requireAuth();

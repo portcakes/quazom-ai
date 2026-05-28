@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { SettingsView } from "@/components/features/settings/settings-view";
 
 export const metadata = {
-  title: "Settings",
+  title: "Quazom - Settings",
+  description: "Update your profile, see your plan usage, and manage your account",
 };
 
 export default async function SettingsPage() {

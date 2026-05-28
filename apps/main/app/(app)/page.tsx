@@ -2,6 +2,11 @@ import { requireAuth } from "@/lib/auth-utils";
 import { NotesWidget } from "@/components/features/notes/notes-widget";
 import { ScheduleWidget } from "@/components/features/schedule/schedule-widget";
 
+export const metadata = {
+  title: "Quazom - Home",
+  description: "Your personalized learning dashboard",
+};
+
 export default async function Home() {
   const session = await requireAuth();
   const firstName = session.user.name?.split(" ")[0] ?? session.user.name ?? "there";

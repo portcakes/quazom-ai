@@ -3,7 +3,8 @@ import { NotesGrid } from "@/components/features/notes/notes-grid";
 import { ContinuityNotesGrid } from "@/components/features/continuity-notes/continuity-notes-grid";
 
 export const metadata = {
-  title: "Notes",
+  title: "Quazom - Your Notes",
+  description: "Every note you've written across your curricula, lessons, and free-form thoughts",
 };
 
 export default async function NotesPage() {

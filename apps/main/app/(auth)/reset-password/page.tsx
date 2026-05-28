@@ -1,5 +1,10 @@
 import { ResetPasswordForm } from "./reset-password-form";
 
+export const metadata = {
+  title: "Quazom - Reset your password",
+  description: "Reset your Quazom password to continue your personalized learning journey",
+};
+
 export default async function ResetPasswordPage({
   searchParams,
 }: {

@@ -4,6 +4,11 @@ import { getCurrentUser } from "@/lib/queries/user";
 import { getUserCurricula } from "@/lib/queries/courses";
 import { CurriculumCollectionCard } from "@/components/features/curriculum/curriculum-collection-card";
 
+export const metadata = {
+  title: "Quazom - Curricula Collection",
+  description: "Your collection of curricula",
+};
+
 export default async function CurriculaCollectionPage() {
   await requireAuth();
   const [user, curricula] = await Promise.all([
