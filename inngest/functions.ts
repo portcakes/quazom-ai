@@ -822,6 +822,10 @@ export const generateLesson = inngest.createFunction(
                   level: true,
                   goal: true,
                   title: true,
+                  // Set on the hidden curriculum that backs a Knowledge
+                  // Sandbox. When present, this lesson is a sandbox Material
+                  // and the prompt is rebuilt to inject + cite sources.
+                  sandboxId: true,
                 },
               },
             },
@@ -845,17 +849,34 @@ export const generateLesson = inngest.createFunction(
 
     const activity = dbActivityToPrompt(context.activityType);
 
-    const prompt = buildLessonPrompt({
-      curriculumTitle: context.module.curriculum.title,
-      curriculumSubject: context.module.curriculum.subject,
-      curriculumLevel: context.module.curriculum.level,
-      curriculumGoal: context.module.curriculum.goal,
-      moduleTitle: context.module.title,
-      moduleSummary: context.module.summary,
-      lessonTitle: context.title,
-      lessonDescription: context.description,
-      activity,
-    });
+    // Sandbox Materials are backed by a hidden curriculum. When this lesson
+    // belongs to one, load the cited sources and build a source-grounded
+    // prompt that requires inline citations + a references list.
+    const sandboxSources = context.module.curriculum.sandboxId
+      ? await step.run("load-sandbox-material-sources", () =>
+          loadSandboxMaterialSources(lessonId),
+        )
+      : null;
+
+    const prompt =
+      sandboxSources && sandboxSources.length > 0
+        ? buildSandboxMaterialPrompt({
+            sandboxTitle: context.module.curriculum.title,
+            lessonTitle: context.title,
+            activity,
+            sources: sandboxSources,
+          })
+        : buildLessonPrompt({
+            curriculumTitle: context.module.curriculum.title,
+            curriculumSubject: context.module.curriculum.subject,
+            curriculumLevel: context.module.curriculum.level,
+            curriculumGoal: context.module.curriculum.goal,
+            moduleTitle: context.module.title,
+            moduleSummary: context.module.summary,
+            lessonTitle: context.title,
+            lessonDescription: context.description,
+            activity,
+          });
 
     let generated: ReturnType<typeof lessonGenerationSchema.parse>;
     try {
@@ -1652,8 +1673,253 @@ ${turnInstruction}`,
 );
 
 // --------------------------------------------------------------------------
+// replyToResearchSession
+//
+// Produces the AI reply for a Knowledge Sandbox research session. Unlike
+// lesson discussions, research sessions have no turn cap — they're a free
+// multi-turn Q&A grounded in the session's selected sources. Tracked as
+// AiUsageKind.RESEARCH_REPLY for cost visibility only.
+// --------------------------------------------------------------------------
+type ReplyResearchEvent = {
+  data: {
+    sessionId: string;
+    sandboxId: string;
+    userId: string;
+  };
+};
+
+export const replyToResearchSession = inngest.createFunction(
+  { id: "reply-to-research-session", triggers: { event: "app/research.reply" } },
+  async ({ event, step }: { event: ReplyResearchEvent; step: Parameters<Parameters<typeof inngest.createFunction>[1]>[0]["step"] }) => {
+    const { sessionId, sandboxId, userId } = event.data;
+
+    try {
+      const session = await step.run("load-research-session", async () => {
+        const s = await prisma.researchSession.findUnique({
+          where: { id: sessionId },
+          select: {
+            id: true,
+            title: true,
+            sourceIds: true,
+            chatHistory: true,
+            sandbox: { select: { id: true, userId: true, title: true } },
+          },
+        });
+        if (!s) throw new Error(`Research session ${sessionId} not found`);
+        if (s.sandbox.userId !== userId) {
+          throw new Error("Research session does not belong to the requesting user");
+        }
+        return s;
+      });
+
+      const selectedSourceIds = Array.isArray(session.sourceIds)
+        ? (session.sourceIds as string[])
+        : [];
+
+      // Reuse the sandbox source loader shape: resolve the selected sources
+      // (or every source) to { label, kind, content }.
+      const sources = await step.run("load-research-sources", () =>
+        loadSandboxSourcesByIds(sandboxId, selectedSourceIds),
+      );
+
+      const history = Array.isArray(session.chatHistory)
+        ? (session.chatHistory as DiscussionMessage[])
+        : [];
+
+      const sourcesBlock =
+        sources.length > 0
+          ? sources
+              .map(
+                (s: SandboxPromptSource, i: number) =>
+                  `[Source ${i + 1}: ${s.label}] (${s.kind})\n${s.content || "(no extracted text — reason from the title/label)"}`,
+              )
+              .join("\n\n---\n\n")
+          : "(No specific sources were attached to this session — answer from general knowledge but stay grounded and note when you're speculating.)";
+
+      const reply = await step.ai.wrap("gemini-research-reply", generateText, {
+        model: google(MODEL),
+        system: `You are a rigorous research assistant helping a learner explore a Knowledge Sandbox titled "${session.sandbox.title}". Ground your answers in the provided sources, cite them inline by their bracketed labels (e.g. "[Source 1: …]") whenever you draw on them, and be candid about uncertainty or contradictions between sources. Keep replies focused and well-structured.
+
+Sources:
+${sourcesBlock}`,
+        messages: history.map((m) => ({ role: m.role, content: m.content })),
+      });
+
+      await step.run("record-research-reply-usage", () =>
+        recordAiUsage({
+          userId,
+          kind: "RESEARCH_REPLY",
+          model: MODEL,
+          result: reply,
+          resourceId: sessionId,
+        }),
+      );
+
+      const replyText = (reply as { text: string }).text;
+
+      await step.run("append-research-reply", async () => {
+        const next: DiscussionMessage[] = [
+          ...history,
+          {
+            role: "assistant",
+            content: replyText,
+            createdAt: new Date().toISOString(),
+          },
+        ];
+        await prisma.researchSession.update({
+          where: { id: sessionId },
+          data: { chatHistory: next },
+        });
+      });
+
+      await step.realtime.publish(
+        "publish-research-ready",
+        userChannel(userId).researchMessageReady,
+        { sessionId, sandboxId },
+      );
+
+      return { sessionId };
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message ? err.message : "Generation failed";
+      await step.realtime.publish(
+        "publish-research-failed",
+        userChannel(userId).researchMessageFailed,
+        { sessionId, sandboxId, message },
+      );
+      throw err;
+    }
+  },
+);
+
+// --------------------------------------------------------------------------
 // helpers
 // --------------------------------------------------------------------------
+
+// One prompt-ready source for a Knowledge Sandbox Material. `content` is the
+// extracted/typed body the model should synthesise + cite; `label` is the
+// human-facing name used as the citation key.
+type SandboxPromptSource = {
+  label: string;
+  kind: string;
+  content: string;
+};
+
+// Cap how much source text we feed the model so a giant PDF doesn't blow the
+// context window. Mirrors the conservative budget used by the continuity
+// prompt builder.
+const SANDBOX_SOURCE_CHAR_BUDGET = 6000;
+
+// Resolve the sources a sandbox Material should cite. Reads the SandboxMaterial
+// row for the lesson, then loads the selected SandboxSource rows (or every
+// source in the sandbox when none were explicitly selected) and flattens each
+// to a { label, kind, content } record. CONTINUITY_NOTE sources have their
+// rich-text body fetched + stripped to plaintext.
+async function loadSandboxMaterialSources(
+  lessonId: string,
+): Promise<SandboxPromptSource[]> {
+  const material = await prisma.sandboxMaterial.findUnique({
+    where: { lessonId },
+    select: { sandboxId: true, sourceIds: true },
+  });
+  if (!material) return [];
+  const selected = Array.isArray(material.sourceIds)
+    ? (material.sourceIds as string[])
+    : [];
+  return loadSandboxSourcesByIds(material.sandboxId, selected);
+}
+
+// Load + flatten a sandbox's sources to prompt-ready records. An empty
+// `selectedSourceIds` means "every source in the sandbox". Shared by the
+// Material generator and the research-session reply function.
+async function loadSandboxSourcesByIds(
+  sandboxId: string,
+  selectedSourceIds: string[],
+): Promise<SandboxPromptSource[]> {
+  const selected = selectedSourceIds;
+  const sources = await prisma.sandboxSource.findMany({
+    where: {
+      sandboxId,
+      ...(selected.length > 0 ? { id: { in: selected } } : {}),
+    },
+    orderBy: { order: "asc" },
+    select: {
+      kind: true,
+      label: true,
+      text: true,
+      continuityNoteId: true,
+      resource: { select: { title: true, content: true, url: true } },
+    },
+  });
+
+  // Resolve continuity-note bodies in one batched query.
+  const noteIds = sources
+    .map((s) => s.continuityNoteId)
+    .filter((id): id is string => Boolean(id));
+  const notes =
+    noteIds.length > 0
+      ? await prisma.continuityNote.findMany({
+          where: { id: { in: noteIds } },
+          select: { id: true, content: true },
+        })
+      : [];
+  const noteContentById = new Map(notes.map((n) => [n.id, n.content]));
+
+  const out: SandboxPromptSource[] = [];
+  for (const s of sources) {
+    let content = "";
+    if (s.kind === "TOPIC" || s.kind === "QUESTION" || s.kind === "THESIS") {
+      content = s.text ?? "";
+    } else if (s.kind === "CONTINUITY_NOTE" && s.continuityNoteId) {
+      content = htmlToPlaintext(noteContentById.get(s.continuityNoteId) ?? "");
+    } else if (s.resource) {
+      content =
+        s.resource.content ??
+        (s.resource.url ? `External link: ${s.resource.url}` : "");
+    }
+    out.push({
+      label: s.label || "Source",
+      kind: s.kind,
+      content: content.slice(0, SANDBOX_SOURCE_CHAR_BUDGET),
+    });
+  }
+  return out;
+}
+
+// Build a source-grounded lesson prompt for a sandbox Material. The model is
+// told to synthesise strictly from the provided sources and to cite them
+// inline by label, finishing with a references list.
+function buildSandboxMaterialPrompt(args: {
+  sandboxTitle: string;
+  lessonTitle: string;
+  activity: LessonActivityType;
+  sources: SandboxPromptSource[];
+}): string {
+  const typeInstruction =
+    ACTIVITY_INSTRUCTIONS[args.activity] ?? ACTIVITY_INSTRUCTIONS.reading;
+  const sourcesBlock = args.sources
+    .map(
+      (s, i) =>
+        `[Source ${i + 1}: ${s.label}] (${s.kind})\n${s.content || "(no extracted text — reason from the title/label)"}`,
+    )
+    .join("\n\n---\n\n");
+  return `Generate a single complete research Material for a Knowledge Sandbox.
+
+Sandbox: ${args.sandboxTitle}
+Material title: ${args.lessonTitle}
+Activity type: ${args.activity}
+
+You are given the learner's research sources below. Synthesise this Material strictly from these sources — do not invent facts that aren't supported by them. Cite sources inline using their bracketed labels (e.g. "[Source 1: …]") wherever you draw on them, and end the main body with a "References" section that lists every source you cited.
+
+Sources:
+${sourcesBlock}
+
+Always populate the \`base\` field with the Material's title, summary, description, duration, objectives, and recommended resources.
+
+${typeInstruction}
+
+Do not populate any child field other than the one matching this activity type.`;
+}
 
 function buildLessonPrompt(args: {
   curriculumTitle: string;

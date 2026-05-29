@@ -57,6 +57,8 @@ import {
   countCurriculaThisMonth,
   countDiscussionGenerationsThisMonth,
   countLessonGenerationsThisMonth,
+  countSandboxesForUser,
+  countSandboxesThisMonth,
   getPlanUsage,
   isOverLimit,
   LIMITS_BY_PLAN,
@@ -120,6 +122,32 @@ function normalizeTags(input: string[] | undefined | null): string[] | null {
     if (out.length >= NOTE_MAX_TAGS) break;
   }
   return out.length > 0 ? out : null;
+}
+
+// Validate that every id in `sourceIds` is a SandboxSource belonging to the
+// given sandbox, returning the deduped subset that actually exists. Used by
+// the research-session + material-generation procedures so the AI is only
+// ever scoped to sources the user actually owns. An empty input is treated
+// as "all sources" downstream, so we just return `[]` here.
+async function assertSandboxSourceIds(
+  sandboxId: string,
+  sourceIds: string[],
+): Promise<string[]> {
+  if (sourceIds.length === 0) return [];
+  const rows = await prisma.sandboxSource.findMany({
+    where: { id: { in: sourceIds }, sandboxId },
+    select: { id: true },
+  });
+  const valid = new Set(rows.map((r) => r.id));
+  const missing = sourceIds.filter((id) => !valid.has(id));
+  if (missing.length > 0) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'One of the selected sources does not belong to this sandbox.',
+    });
+  }
+  // Preserve caller order, deduped.
+  return Array.from(new Set(sourceIds));
 }
 
 // Shared zod refinement for an HTTP(S) URL the user pastes into "Add link".
@@ -194,6 +222,19 @@ const MAX_CONTINUITY_NOTES_PER_THESIS = 8;
 // Maximum length of a user-written thesis. The AI-generated one is short by
 // construction (1-3 sentences) so this is mostly to bound textarea input.
 const THESIS_MAX_LENGTH = 2000;
+
+// ---- Knowledge Sandbox bounds --------------------------------------------
+// Caps mirror the curriculum source bounds; sandboxes can carry a few more
+// inputs because research workspaces are inherently multi-source.
+const SANDBOX_TITLE_MAX_LENGTH = 120;
+const SANDBOX_DESCRIPTION_MAX_LENGTH = 2000;
+const MAX_RESOURCE_SOURCES_PER_SANDBOX = 20;
+const MAX_TOPICS_PER_SANDBOX = 12;
+const MAX_QUESTIONS_PER_SANDBOX = 12;
+const MAX_CONTINUITY_NOTES_PER_SANDBOX = 12;
+// Per-message length for research-session chat — matches the discussion cap.
+const RESEARCH_MESSAGE_MAX_LENGTH = 4000;
+const RESEARCH_SESSION_TITLE_MAX_LENGTH = 120;
 
 type DbLessonActivityType =
   | "VIDEO"
@@ -722,6 +763,588 @@ export const appRouter = createTRPCRouter({
         },
       });
       return { requestId: input.requestId };
+    }),
+  // ===================================================================
+  // Knowledge Sandboxes
+  //
+  // A Sandbox is a research workspace alongside Curricula. Creating one
+  // also mints a hidden backing Curriculum (+ one Module) so generated
+  // Materials are real Lesson rows that reuse the lesson generator,
+  // viewer, and monthly lesson cap. Research Sessions are unmetered
+  // multi-turn AI chats over a selection of the sandbox's sources.
+  // ===================================================================
+  createSandbox: activeUserProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string().min(1).max(SANDBOX_TITLE_MAX_LENGTH),
+        description: z
+          .string()
+          .max(SANDBOX_DESCRIPTION_MAX_LENGTH)
+          .optional()
+          .default(''),
+        thesis: z.string().max(THESIS_MAX_LENGTH).optional().default(''),
+        resourceIds: z
+          .array(z.string().uuid())
+          .max(MAX_RESOURCE_SOURCES_PER_SANDBOX)
+          .optional()
+          .default([]),
+        extraTopics: z
+          .array(z.string().min(1).max(200))
+          .max(MAX_TOPICS_PER_SANDBOX)
+          .optional()
+          .default([]),
+        questions: z
+          .array(z.string().min(1).max(500))
+          .max(MAX_QUESTIONS_PER_SANDBOX)
+          .optional()
+          .default([]),
+        continuityNoteIds: z
+          .array(z.string().uuid())
+          .max(MAX_CONTINUITY_NOTES_PER_SANDBOX)
+          .optional()
+          .default([]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // ---- Plan-tier cap guard ---------------------------------------
+      const user = await prisma.user.findUnique({
+        where: { id: ctx.userId },
+        select: { isAlpha: true, subscriptionPlan: true },
+      });
+      const plan = resolveEffectivePlan({
+        subscriptionPlan: user?.subscriptionPlan ?? null,
+        isAlpha: user?.isAlpha ?? false,
+      });
+      const cap = LIMITS_BY_PLAN[plan].sandboxes;
+      if (cap.limit !== null) {
+        const used =
+          cap.period === 'lifetime'
+            ? await countSandboxesForUser(ctx.userId)
+            : await countSandboxesThisMonth(ctx.userId);
+        if (isOverLimit({ plan, feature: 'sandboxes', used })) {
+          const periodLabel = cap.period === 'lifetime' ? 'total' : 'per month';
+          const reset =
+            cap.period === 'month'
+              ? ' Resets on the 1st.'
+              : ' Upgrade your plan or delete one to free up a slot.';
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: `Your plan is limited to ${cap.limit} Knowledge Sandbox${cap.limit === 1 ? '' : 'es'} ${periodLabel}.${reset}`,
+          });
+        }
+      }
+
+      // ---- Resource ownership + readiness ----------------------------
+      let resources: Array<{
+        id: string;
+        kind: 'LINK' | 'FILE';
+        title: string;
+        status: string;
+      }> = [];
+      if (input.resourceIds.length > 0) {
+        const ids = input.resourceIds;
+        const rows = await prisma.resource.findMany({
+          where: { id: { in: ids }, userId: ctx.userId },
+          select: { id: true, kind: true, title: true, status: true },
+        });
+        const missing = ids.filter((id) => !rows.some((r) => r.id === id));
+        if (missing.length > 0) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'One of the attached resources is missing or not yours.',
+          });
+        }
+        const notReady = rows.filter((r) => r.status !== 'READY');
+        if (notReady.length > 0) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message:
+              "One of your attached resources isn't ready yet. Wait for the upload + extraction to finish, then try again.",
+          });
+        }
+        resources = rows;
+      }
+
+      // ---- Continuity-note ownership (provenance + labels) -----------
+      let notes: Array<{ id: string; title: string | null }> = [];
+      if (input.continuityNoteIds.length > 0) {
+        notes = await prisma.continuityNote.findMany({
+          where: { id: { in: input.continuityNoteIds }, userId: ctx.userId },
+          select: { id: true, title: true },
+        });
+        if (notes.length !== input.continuityNoteIds.length) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'One of the referenced continuity notes is missing or not yours.',
+          });
+        }
+      }
+
+      const thesis = input.thesis.trim() || null;
+      const backingCurriculumId = crypto.randomUUID();
+      const backingModuleId = crypto.randomUUID();
+
+      // ---- Create sandbox + sources + hidden backing curriculum ------
+      await prisma.$transaction(async (tx) => {
+        await tx.sandbox.create({
+          data: {
+            id: input.id,
+            userId: ctx.userId,
+            title: input.title.trim(),
+            description: input.description.trim(),
+            thesis,
+          },
+        });
+
+        // Hidden backing curriculum + a single module to host generated
+        // Materials as Lesson rows. `sandboxId` ties them together and keeps
+        // them out of every curricula list/count.
+        await tx.curriculum.create({
+          data: {
+            id: backingCurriculumId,
+            userId: ctx.userId,
+            sandboxId: input.id,
+            title: input.title.trim(),
+            subject: input.title.trim(),
+            level: 'beginner',
+            goal: '',
+            overview: '',
+            estimatedDuration: '',
+            objectives: [],
+            modules: [],
+            recommendedResources: [],
+            raw_ai_response: '',
+            structured_data_json: {},
+            kind: 'SINGLE',
+            status: 'READY',
+            isHidden: true,
+          },
+        });
+        await tx.module.create({
+          data: {
+            id: backingModuleId,
+            curriculumId: backingCurriculumId,
+            title: 'Materials',
+            summary: 'Readings, quizzes, and projects generated in this sandbox.',
+            order: 1,
+            level: 'beginner',
+            objectives: [],
+          },
+        });
+
+        let order = 0;
+        if (thesis) {
+          await tx.sandboxSource.create({
+            data: {
+              id: crypto.randomUUID(),
+              sandboxId: input.id,
+              kind: 'THESIS',
+              order: order++,
+              label: 'Thesis',
+              text: thesis,
+            },
+          });
+        }
+        for (const resource of resources) {
+          await tx.sandboxSource.create({
+            data: {
+              id: crypto.randomUUID(),
+              sandboxId: input.id,
+              kind: resource.kind === 'FILE' ? 'FILE_RESOURCE' : 'LINK_RESOURCE',
+              order: order++,
+              label: resource.title,
+              resourceId: resource.id,
+            },
+          });
+        }
+        for (const topic of input.extraTopics) {
+          await tx.sandboxSource.create({
+            data: {
+              id: crypto.randomUUID(),
+              sandboxId: input.id,
+              kind: 'TOPIC',
+              order: order++,
+              label: topic.trim().slice(0, SANDBOX_TITLE_MAX_LENGTH),
+              text: topic.trim(),
+            },
+          });
+        }
+        for (const question of input.questions) {
+          await tx.sandboxSource.create({
+            data: {
+              id: crypto.randomUUID(),
+              sandboxId: input.id,
+              kind: 'QUESTION',
+              order: order++,
+              label: question.trim().slice(0, SANDBOX_TITLE_MAX_LENGTH),
+              text: question.trim(),
+            },
+          });
+        }
+        for (const noteId of input.continuityNoteIds) {
+          const note = notes.find((n) => n.id === noteId);
+          await tx.sandboxSource.create({
+            data: {
+              id: crypto.randomUUID(),
+              sandboxId: input.id,
+              kind: 'CONTINUITY_NOTE',
+              order: order++,
+              label: note?.title?.trim() || 'Untitled note',
+              continuityNoteId: noteId,
+            },
+          });
+        }
+      });
+
+      return { id: input.id };
+    }),
+  listSandboxes: protectedcProcedure.query(async ({ ctx }) => {
+    const sandboxes = await prisma.sandbox.findMany({
+      where: { userId: ctx.userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        isHidden: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: { sources: true, researchSessions: true, materials: true },
+        },
+      },
+    });
+    return sandboxes.map((s) => ({
+      id: s.id,
+      title: s.title,
+      description: s.description,
+      isHidden: s.isHidden,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      sourceCount: s._count.sources,
+      researchSessionCount: s._count.researchSessions,
+      materialCount: s._count.materials,
+    }));
+  }),
+  setSandboxHidden: protectedcProcedure
+    .input(z.object({ id: z.string(), isHidden: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const sandbox = await prisma.sandbox.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: { id: true },
+      });
+      if (!sandbox) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Sandbox not found' });
+      }
+      await prisma.sandbox.update({
+        where: { id: input.id },
+        data: { isHidden: input.isHidden },
+      });
+      return { ok: true };
+    }),
+  deleteSandbox: protectedcProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const sandbox = await prisma.sandbox.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: { id: true },
+      });
+      if (!sandbox) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Sandbox not found' });
+      }
+      // Cascades to the backing curriculum (and its modules/lessons), the
+      // sandbox sources, research sessions, and material join rows.
+      await prisma.sandbox.delete({ where: { id: input.id } });
+      return { ok: true };
+    }),
+  // ---- Research Sessions ---------------------------------------------
+  createResearchSession: activeUserProcedure
+    .input(
+      z.object({
+        sandboxId: z.string(),
+        title: z
+          .string()
+          .max(RESEARCH_SESSION_TITLE_MAX_LENGTH)
+          .optional()
+          .default(''),
+        sourceIds: z.array(z.string().uuid()).max(MAX_RESOURCE_SOURCES_PER_SANDBOX),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const sandbox = await prisma.sandbox.findFirst({
+        where: { id: input.sandboxId, userId: ctx.userId },
+        select: { id: true },
+      });
+      if (!sandbox) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Sandbox not found' });
+      }
+      // Validate the selected source ids actually belong to this sandbox.
+      const validSourceIds = await assertSandboxSourceIds(
+        input.sandboxId,
+        input.sourceIds,
+      );
+      const id = crypto.randomUUID();
+      await prisma.researchSession.create({
+        data: {
+          id,
+          sandboxId: input.sandboxId,
+          title: input.title.trim() || 'Research Session',
+          sourceIds: validSourceIds,
+          chatHistory: [],
+        },
+      });
+      return { id };
+    }),
+  listResearchSessions: protectedcProcedure
+    .input(z.object({ sandboxId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const sandbox = await prisma.sandbox.findFirst({
+        where: { id: input.sandboxId, userId: ctx.userId },
+        select: { id: true },
+      });
+      if (!sandbox) return [];
+      const sessions = await prisma.researchSession.findMany({
+        where: { sandboxId: input.sandboxId },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          sourceIds: true,
+          chatHistory: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      return sessions.map((s) => {
+        const history = Array.isArray(s.chatHistory)
+          ? (s.chatHistory as unknown[])
+          : [];
+        const sourceIds = Array.isArray(s.sourceIds)
+          ? (s.sourceIds as string[])
+          : [];
+        return {
+          id: s.id,
+          title: s.title,
+          sourceCount: sourceIds.length,
+          messageCount: history.length,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+        };
+      });
+    }),
+  getResearchSession: protectedcProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const session = await prisma.researchSession.findUnique({
+        where: { id: input.id },
+        select: {
+          id: true,
+          title: true,
+          sourceIds: true,
+          chatHistory: true,
+          sandbox: { select: { id: true, userId: true, title: true } },
+        },
+      });
+      if (!session || session.sandbox.userId !== ctx.userId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Research session not found' });
+      }
+      const sourceIds = Array.isArray(session.sourceIds)
+        ? (session.sourceIds as string[])
+        : [];
+      const sources =
+        sourceIds.length > 0
+          ? await prisma.sandboxSource.findMany({
+              where: { id: { in: sourceIds }, sandboxId: session.sandbox.id },
+              select: { id: true, label: true, kind: true },
+            })
+          : [];
+      const history = Array.isArray(session.chatHistory)
+        ? (session.chatHistory as Array<{
+            role: string;
+            content: string;
+            createdAt: string;
+          }>)
+        : [];
+      return {
+        id: session.id,
+        title: session.title,
+        sandboxId: session.sandbox.id,
+        sources,
+        chatHistory: history,
+      };
+    }),
+  sendResearchMessage: activeUserProcedure
+    .input(
+      z.object({
+        sessionId: z.string(),
+        content: z.string().min(1).max(RESEARCH_MESSAGE_MAX_LENGTH),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const session = await prisma.researchSession.findUnique({
+        where: { id: input.sessionId },
+        select: {
+          id: true,
+          chatHistory: true,
+          sandbox: { select: { id: true, userId: true } },
+        },
+      });
+      if (!session || session.sandbox.userId !== ctx.userId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Research session not found' });
+      }
+      const history = Array.isArray(session.chatHistory)
+        ? (session.chatHistory as Array<{
+            role: string;
+            content: string;
+            createdAt: string;
+          }>)
+        : [];
+      const next = [
+        ...history,
+        {
+          role: 'user' as const,
+          content: input.content,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      await prisma.researchSession.update({
+        where: { id: session.id },
+        data: { chatHistory: next },
+      });
+      await inngest.send({
+        name: 'app/research.reply',
+        data: {
+          sessionId: session.id,
+          sandboxId: session.sandbox.id,
+          userId: ctx.userId,
+        },
+      });
+      return { ok: true };
+    }),
+  deleteResearchSession: activeUserProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const session = await prisma.researchSession.findUnique({
+        where: { id: input.id },
+        select: { id: true, sandbox: { select: { userId: true } } },
+      });
+      if (!session || session.sandbox.userId !== ctx.userId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Research session not found' });
+      }
+      await prisma.researchSession.delete({ where: { id: input.id } });
+      return { ok: true };
+    }),
+  // ---- Materials (generated lessons) ---------------------------------
+  generateSandboxMaterial: activeUserProcedure
+    .input(
+      z.object({
+        sandboxId: z.string(),
+        kind: z.enum(['reading', 'quiz', 'project']),
+        title: z.string().min(1).max(200),
+        sourceIds: z
+          .array(z.string().uuid())
+          .max(MAX_RESOURCE_SOURCES_PER_SANDBOX),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Load the sandbox + its hidden backing module.
+      const sandbox = await prisma.sandbox.findFirst({
+        where: { id: input.sandboxId, userId: ctx.userId },
+        select: {
+          id: true,
+          backingCurriculum: {
+            select: {
+              id: true,
+              curriculumModules: {
+                orderBy: { order: 'asc' },
+                take: 1,
+                select: { id: true },
+              },
+            },
+          },
+        },
+      });
+      if (!sandbox || !sandbox.backingCurriculum) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Sandbox not found' });
+      }
+      const moduleId = sandbox.backingCurriculum.curriculumModules[0]?.id;
+      if (!moduleId) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Sandbox is missing its materials module.',
+        });
+      }
+
+      // Validate the cited sources belong to this sandbox.
+      const validSourceIds = await assertSandboxSourceIds(
+        input.sandboxId,
+        input.sourceIds,
+      );
+
+      // ---- Plan-tier monthly lesson cap (materials are lessons) ------
+      const user = await prisma.user.findUnique({
+        where: { id: ctx.userId },
+        select: { isAlpha: true, subscriptionPlan: true },
+      });
+      const plan = resolveEffectivePlan({
+        subscriptionPlan: user?.subscriptionPlan ?? null,
+        isAlpha: user?.isAlpha ?? false,
+      });
+      const lessonCap = LIMITS_BY_PLAN[plan].lessonsPerMonth;
+      if (lessonCap.limit !== null) {
+        const lessonsUsed = await countLessonGenerationsThisMonth(ctx.userId);
+        if (isOverLimit({ plan, feature: 'lessonsThisMonth', used: lessonsUsed })) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: `Your plan is limited to ${lessonCap.limit} lesson generations per month, and sandbox materials count toward that cap. It resets on the 1st.`,
+          });
+        }
+      }
+
+      const activityType =
+        input.kind === 'quiz'
+          ? 'QUIZ'
+          : input.kind === 'project'
+            ? 'PROJECT'
+            : 'READING';
+      const materialKind =
+        input.kind === 'quiz'
+          ? 'QUIZ'
+          : input.kind === 'project'
+            ? 'PROJECT'
+            : 'READING';
+
+      const lessonId = crypto.randomUUID();
+      const existingCount = await prisma.lesson.count({ where: { moduleId } });
+      await prisma.$transaction(async (tx) => {
+        await tx.lesson.create({
+          data: {
+            id: lessonId,
+            moduleId,
+            title: input.title.trim(),
+            description: '',
+            activityType,
+            order: existingCount + 1,
+            status: 'STUB',
+          },
+        });
+        await tx.sandboxMaterial.create({
+          data: {
+            id: crypto.randomUUID(),
+            sandboxId: input.sandboxId,
+            lessonId,
+            kind: materialKind,
+            sourceIds: validSourceIds,
+          },
+        });
+      });
+
+      await inngest.send({
+        name: 'app/lesson.generate',
+        data: { lessonId, userId: ctx.userId },
+      });
+      return { lessonId };
     }),
   getCurriculum: protectedcProcedure
     .input(z.object({ id: z.string() }))

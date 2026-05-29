@@ -22,6 +22,12 @@ import { Textarea } from "@quazom-ai/ui/components/ui/textarea";
 import { Label } from "@quazom-ai/ui/components/ui/label";
 import { Badge } from "@quazom-ai/ui/components/ui/badge";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@quazom-ai/ui/components/ui/tabs";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -32,6 +38,8 @@ import {
   BookOpenIcon,
   SparklesIcon,
   Loader2Icon,
+  GraduationCapIcon,
+  FlaskConicalIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -72,31 +80,76 @@ type Props = {
   onCreated?: () => void;
 };
 
-const NewCurriculumModal = ({ onCreated }: Props = {}) => {
+const NewStudiesModal = ({ onCreated }: Props = {}) => {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"curriculum" | "sandbox">("curriculum");
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <div className="flex cursor-pointer items-center rounded-md p-2 hover:bg-sidebar-accent">
           <PlusIcon className="mr-2 size-4" />
           <span className="text-sm font-medium text-foreground">
-            New Curriculum
+            New Studies
           </span>
         </div>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         {open ? (
-          <NewCurriculumForm
-            onClose={() => setOpen(false)}
-            onCreated={onCreated}
-          />
+          <div className="flex flex-col gap-5">
+            <DialogHeader>
+              <DialogTitle>New Studies</DialogTitle>
+              <DialogDescription>
+                Start a guided Curriculum, or open a Knowledge Sandbox for
+                open-ended research and long-form study.
+              </DialogDescription>
+            </DialogHeader>
+
+            <Tabs
+              value={mode}
+              onValueChange={(v) => setMode(v as typeof mode)}
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="curriculum" className="gap-1.5">
+                  <GraduationCapIcon className="size-4" /> Curriculum
+                </TabsTrigger>
+                <TabsTrigger value="sandbox" className="gap-1.5">
+                  <FlaskConicalIcon className="size-4" /> Sandbox
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="curriculum" className="mt-4">
+                <p className="mb-4 text-sm text-muted-foreground">
+                  A <strong className="text-foreground">Curriculum</strong> is a
+                  structured, level-based course — the AI plans modules and
+                  lessons toward your goal so you can learn step by step.
+                </p>
+                <NewCurriculumForm
+                  onClose={() => setOpen(false)}
+                  onCreated={onCreated}
+                />
+              </TabsContent>
+
+              <TabsContent value="sandbox" className="mt-4">
+                <p className="mb-4 text-sm text-muted-foreground">
+                  A <strong className="text-foreground">Sandbox</strong> is a
+                  free-form research workspace — collect sources, chat with an
+                  AI research partner, and generate readings, quizzes, and
+                  projects that cite your material.
+                </p>
+                <NewSandboxForm
+                  onClose={() => setOpen(false)}
+                  onCreated={onCreated}
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
         ) : null}
       </DialogContent>
     </Dialog>
   );
 };
 
-export default NewCurriculumModal;
+export default NewStudiesModal;
 
 function NewCurriculumForm({
   onClose,
@@ -223,14 +276,6 @@ function NewCurriculumForm({
 
   return (
     <div className="flex flex-col gap-5">
-      <DialogHeader>
-        <DialogTitle>New Curriculum</DialogTitle>
-        <DialogDescription>
-          Start from a topic, or attach links and uploads to build a multi-source
-          Continuity Curriculum.
-        </DialogDescription>
-      </DialogHeader>
-
       <Section title="Topic" description="Pick a subject or let your sources anchor the curriculum.">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
@@ -343,6 +388,178 @@ function NewCurriculumForm({
               : isContinuity
                 ? "Create Continuity Curriculum"
                 : "Create"}
+          </Button>
+        </div>
+      </DialogFooter>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// New Sandbox form
+// ---------------------------------------------------------------------------
+
+function NewSandboxForm({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated?: () => void;
+}) {
+  const trpc = useTRPC();
+  const router = useRouter();
+
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [thesis, setThesis] = useState("");
+  const [questionsText, setQuestionsText] = useState("");
+  const [sources, setSources] = useState<Source[]>([]);
+  const [referencedNotes, setReferencedNotes] = useState<
+    ContinuityNoteSelection[]
+  >([]);
+
+  const notesQuery = useQuery(trpc.listContinuityNotes.queryOptions());
+  const notes = notesQuery.data ?? [];
+
+  // Quota snapshot — the `sandboxes` row was added to the plan usage summary.
+  const planUsageQuery = useQuery(trpc.getAlphaUsage.queryOptions());
+  const quotaRow = planUsageQuery.data?.sandboxes;
+
+  const create = useMutation(
+    trpc.createSandbox.mutationOptions({
+      onSuccess: ({ id }) => {
+        toast.success("Sandbox created");
+        onCreated?.();
+        onClose();
+        // Refresh so the new sandbox shows up in the sidebar list.
+        router.refresh();
+        router.push(`/sandboxes/${id}`);
+      },
+      onError: (err) => toast.error(err.message ?? "Failed to create sandbox"),
+    }),
+  );
+
+  const canSubmit = !create.isPending && title.trim().length > 0;
+
+  const handleSubmit = () => {
+    const { resourceIds, extraTopics } = partitionSourcesForMutation(sources);
+    const questions = questionsText
+      .split("\n")
+      .map((q) => q.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+    create.mutate({
+      id: crypto.randomUUID(),
+      title: title.trim(),
+      description: description.trim(),
+      thesis: thesis.trim(),
+      resourceIds,
+      extraTopics,
+      questions,
+      continuityNoteIds: referencedNotes.map((n) => n.id),
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <Section
+        title="Workspace"
+        description="Name your sandbox and, optionally, describe what you're researching."
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new-sandbox-title">Title</Label>
+            <Input
+              id="new-sandbox-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. The fall of the Bronze Age, Quantum error correction, …"
+              maxLength={120}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new-sandbox-description">
+              Description (optional)
+            </Label>
+            <Textarea
+              id="new-sandbox-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What are you exploring in this workspace?"
+              rows={2}
+              maxLength={2000}
+            />
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        title="Sources"
+        description="Attach links and uploads, or add topic chips. You can always add more sources later from the sandbox."
+      >
+        <SourcesEditor sources={sources} setSources={setSources} />
+      </Section>
+
+      <Section
+        title="Thesis & questions (optional)"
+        description="Frame your research with a working thesis and the questions you want to answer (one per line)."
+      >
+        <div className="flex flex-col gap-3">
+          <Textarea
+            value={thesis}
+            onChange={(e) => setThesis(e.target.value)}
+            placeholder="Working thesis — what do you expect to find?"
+            rows={2}
+            maxLength={2000}
+          />
+          <Textarea
+            value={questionsText}
+            onChange={(e) => setQuestionsText(e.target.value)}
+            placeholder={"Research questions, one per line…\nWhat caused X?\nHow does Y relate to Z?"}
+            rows={3}
+            maxLength={3000}
+          />
+        </div>
+      </Section>
+
+      {notes.length > 0 ? (
+        <Section
+          title="Continuity notes (optional)"
+          description="Bring your own notes in as sources the AI can cite."
+        >
+          <NotesPicker
+            notes={notes.map((n) => ({
+              id: n.id,
+              title: n.title ?? "Untitled note",
+            }))}
+            selected={referencedNotes}
+            setSelected={setReferencedNotes}
+          />
+        </Section>
+      ) : null}
+
+      <DialogFooter className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+          <span>Knowledge Sandbox</span>
+          {quotaRow ? (
+            <span>
+              Usage: {quotaRow.used}
+              {quotaRow.limit !== null ? ` / ${quotaRow.limit}` : ""}{" "}
+              {quotaRow.period === "lifetime" ? "lifetime" : "this month"}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex gap-2 sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={create.isPending}
+          >
+            Cancel
+          </Button>
+          <Button type="button" disabled={!canSubmit} onClick={handleSubmit}>
+            {create.isPending ? "Creating…" : "Create Sandbox"}
           </Button>
         </div>
       </DialogFooter>

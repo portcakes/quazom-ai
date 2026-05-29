@@ -10,6 +10,7 @@ import {
   generateLesson,
   gradeSubmission,
   replyToDiscussion,
+  replyToResearchSession,
 } from "@/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -24,5 +25,6 @@ export const { GET, POST, PUT } = serve({
     generateLesson,
     gradeSubmission,
     replyToDiscussion,
+    replyToResearchSession,
   ],
 });

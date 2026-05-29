@@ -23,6 +23,9 @@ export type DashboardOverview = {
   // Distinct users that signed in at least once in range.
   activeUsers: number;
   curriculaGenerated: number;
+  // Knowledge Sandboxes created in range, plus the all-time total.
+  sandboxesCreated: number;
+  totalSandboxes: number;
   lessonsGenerated: number;
   notesCreated: number;
   annotationsCreated: number;
@@ -56,6 +59,8 @@ export async function getDashboardOverview(rangeId: RangeId): Promise<DashboardO
     signIns,
     activeUsersAgg,
     curriculaGenerated,
+    sandboxesCreated,
+    totalSandboxes,
     lessonsGenerated,
     notesCreated,
     annotationsCreated,
@@ -76,7 +81,11 @@ export async function getDashboardOverview(rangeId: RangeId): Promise<DashboardO
       by: ["userId"],
       where: { createdAt: range },
     }),
-    prisma.curriculum.count({ where: { createdAt: range } }),
+    // Exclude the hidden curricula that back Knowledge Sandboxes so the
+    // curricula metric only counts standalone curricula.
+    prisma.curriculum.count({ where: { createdAt: range, sandboxId: null } }),
+    prisma.sandbox.count({ where: { createdAt: range } }),
+    prisma.sandbox.count(),
     prisma.lesson.count({
       where: { status: "READY", updatedAt: range },
     }),
@@ -112,6 +121,8 @@ export async function getDashboardOverview(rangeId: RangeId): Promise<DashboardO
     signIns,
     activeUsers: activeUsersAgg.length,
     curriculaGenerated,
+    sandboxesCreated,
+    totalSandboxes,
     lessonsGenerated,
     notesCreated,
     annotationsCreated,
@@ -196,6 +207,7 @@ export type UserActivityRow = {
   createdAt: Date;
   signInsInRange: number;
   curriculaInRange: number;
+  sandboxesInRange: number;
   lessonsInRange: number;
   notesInRange: number;
   annotationsInRange: number;
@@ -224,6 +236,7 @@ export async function getUserActivity(rangeId: RangeId): Promise<UserActivityRow
     sessionAgg,
     sessionAllAgg,
     curriculaAgg,
+    sandboxAgg,
     notesAgg,
     annotationsAgg,
     schedulesAgg,
@@ -254,6 +267,11 @@ export async function getUserActivity(rangeId: RangeId): Promise<UserActivityRow
       _count: { _all: true },
     }),
     prisma.curriculum.groupBy({
+      by: ["userId"],
+      where: { createdAt: range, sandboxId: null },
+      _count: { _all: true },
+    }),
+    prisma.sandbox.groupBy({
       by: ["userId"],
       where: { createdAt: range },
       _count: { _all: true },
@@ -314,6 +332,7 @@ export async function getUserActivity(rangeId: RangeId): Promise<UserActivityRow
   const sessionByUser = byId(sessionAgg);
   const sessionAllByUser = byId(sessionAllAgg);
   const curriculaByUser = byId(curriculaAgg);
+  const sandboxByUser = byId(sandboxAgg);
   const notesByUser = byId(notesAgg);
   const annotationsByUser = byId(annotationsAgg);
   const schedulesByUser = byId(schedulesAgg);
@@ -333,6 +352,7 @@ export async function getUserActivity(rangeId: RangeId): Promise<UserActivityRow
     signInsInRange: sessionByUser.get(u.id)?._count._all ?? 0,
     signInsAllTime: sessionAllByUser.get(u.id)?._count._all ?? 0,
     curriculaInRange: curriculaByUser.get(u.id)?._count._all ?? 0,
+    sandboxesInRange: sandboxByUser.get(u.id)?._count._all ?? 0,
     lessonsInRange: lessonsByUser.get(u.id) ?? 0,
     notesInRange: notesByUser.get(u.id)?._count._all ?? 0,
     annotationsInRange: annotationsByUser.get(u.id)?._count._all ?? 0,
@@ -361,6 +381,8 @@ export type UserDetail = {
     lastSignInAt: Date | null;
     curriculaInRange: number;
     curriculaAllTime: number;
+    sandboxesInRange: number;
+    sandboxesAllTime: number;
     lessonsInRange: number;
     lessonsAllTime: number;
     notesInRange: number;
@@ -419,6 +441,8 @@ export async function getUserDetail(
     lastSignInRow,
     curriculaInRange,
     curriculaAllTime,
+    sandboxesInRange,
+    sandboxesAllTime,
     lessonsInRange,
     lessonsAllTime,
     notesInRange,
@@ -442,8 +466,12 @@ export async function getUserDetail(
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
     }),
-    prisma.curriculum.count({ where: { userId, createdAt: range } }),
-    prisma.curriculum.count({ where: { userId } }),
+    prisma.curriculum.count({
+      where: { userId, createdAt: range, sandboxId: null },
+    }),
+    prisma.curriculum.count({ where: { userId, sandboxId: null } }),
+    prisma.sandbox.count({ where: { userId, createdAt: range } }),
+    prisma.sandbox.count({ where: { userId } }),
     prisma.lesson.count({
       where: {
         status: "READY",
@@ -505,6 +533,8 @@ export async function getUserDetail(
       lastSignInAt: lastSignInRow?.createdAt ?? null,
       curriculaInRange,
       curriculaAllTime,
+      sandboxesInRange,
+      sandboxesAllTime,
       lessonsInRange,
       lessonsAllTime,
       notesInRange,

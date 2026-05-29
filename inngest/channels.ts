@@ -40,6 +40,21 @@ export const userChannel = channel({
         lessonId: z.string(),
       }),
     },
+    // Fired after the AI replies in a Knowledge Sandbox research session.
+    researchMessageReady: {
+      schema: z.object({
+        sessionId: z.string(),
+        sandboxId: z.string(),
+      }),
+    },
+    // Fired when a research-session reply throws so the chat can surface it.
+    researchMessageFailed: {
+      schema: z.object({
+        sessionId: z.string(),
+        sandboxId: z.string(),
+        message: z.string(),
+      }),
+    },
     // Fired after the phase-2 quiz/exercise question generation succeeds so
     // the lesson page can refresh and reveal the questions section.
     assessmentReady: {
@@ -97,6 +112,8 @@ export const userChannelTopics = [
   "lessonFailed",
   "feedbackReady",
   "discussionMessageReady",
+  "researchMessageReady",
+  "researchMessageFailed",
   "assessmentReady",
   "assessmentFailed",
   "thesisReady",

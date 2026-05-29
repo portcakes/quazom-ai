@@ -49,6 +49,7 @@ export default async function UsersListPage({ searchParams }: PageProps) {
                 <Th className="text-left">User</Th>
                 <Th className="text-right">Signed in</Th>
                 <Th className="text-right">Curricula</Th>
+                <Th className="text-right">Sandboxes</Th>
                 <Th className="text-right">Lessons</Th>
                 <Th className="text-right">Notes</Th>
                 <Th className="text-right">Annot.</Th>
@@ -63,7 +64,7 @@ export default async function UsersListPage({ searchParams }: PageProps) {
               {rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={12}
                     className="px-4 py-10 text-center text-sm text-muted-foreground"
                   >
                     No users found.
@@ -126,6 +127,7 @@ function UserRow({ row }: { row: UserActivityRow }) {
       </Td>
       <NumTd value={row.signInsInRange} subValue={`${row.signInsAllTime.toLocaleString()} all-time`} />
       <NumTd value={row.curriculaInRange} />
+      <NumTd value={row.sandboxesInRange} />
       <NumTd value={row.lessonsInRange} />
       <NumTd value={row.notesInRange} />
       <NumTd value={row.annotationsInRange} />

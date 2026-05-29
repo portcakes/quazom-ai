@@ -6,6 +6,7 @@ import {
   CalendarDaysIcon,
   CoinsIcon,
   FileTextIcon,
+  FlaskConicalIcon,
   HighlighterIcon,
   LogInIcon,
   ShieldCheckIcon,
@@ -29,6 +30,7 @@ const KIND_LABELS: Record<string, string> = {
   CURRICULUM_BACKFILL: "Curriculum backfill",
   LESSON: "Lesson generation",
   DISCUSSION_REPLY: "Discussion replies",
+  RESEARCH_REPLY: "Sandbox research replies",
   SUBMISSION_FEEDBACK: "Quiz / exercise feedback",
   NOTE_SUMMARY: "Note summarizations",
   TTS: "Audio (TTS)",
@@ -126,6 +128,12 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
           value={stats.curriculaInRange}
           hint={`${stats.curriculaAllTime.toLocaleString()} all-time`}
           icon={SparklesIcon}
+        />
+        <StatCard
+          label="Sandboxes created"
+          value={stats.sandboxesInRange}
+          hint={`${stats.sandboxesAllTime.toLocaleString()} all-time`}
+          icon={FlaskConicalIcon}
         />
       </section>
 

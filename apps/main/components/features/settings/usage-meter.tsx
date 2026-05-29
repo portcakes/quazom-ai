@@ -47,6 +47,7 @@ export function UsageMeter({ usage, isLoading }: Props) {
   if (
     usage.curricula.limit === null &&
     usage.continuityCurricula.limit === null &&
+    usage.sandboxes.limit === null &&
     usage.lessonsThisMonth.limit === null &&
     usage.discussionsThisMonth.limit === null &&
     usage.ttsThisMonth.limit === null
@@ -69,6 +70,11 @@ export function UsageMeter({ usage, isLoading }: Props) {
       label: "Continuity Curricula (multi-source)",
       description: `Counts curricula generated from 2+ sources · ${periodLabel(usage.continuityCurricula.period)}.`,
       data: usage.continuityCurricula,
+    },
+    {
+      label: "Knowledge Sandboxes",
+      description: `Research workspaces · ${periodLabel(usage.sandboxes.period)}. Materials you generate inside count toward the lesson cap below.`,
+      data: usage.sandboxes,
     },
     {
       label: "Lesson generations this month",

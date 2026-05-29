@@ -31,6 +31,13 @@ export type PlanLimits = {
    * cost significantly more tokens per call.
    */
   continuityCurricula: Cap;
+  /**
+   * Knowledge Sandbox cap. FREE / ALPHA get a single lifetime sandbox;
+   * EXPLORER gets 10/month; SCHOLAR is unlimited. Lessons (Materials)
+   * generated inside a sandbox count against `lessonsPerMonth` instead —
+   * this cap only gates how many sandboxes a user can create.
+   */
+  sandboxes: Cap;
   lessonsPerMonth: Cap;
   discussionsPerMonth: Cap;
   ttsPerMonth: Cap;
@@ -48,6 +55,7 @@ export const LIMITS_BY_PLAN: Record<EffectivePlan, PlanLimits> = {
   ALPHA: {
     curricula: { limit: 5, period: "lifetime" },
     continuityCurricula: { limit: 2, period: "lifetime" },
+    sandboxes: { limit: 1, period: "lifetime" },
     lessonsPerMonth: { limit: 30, period: "month" },
     discussionsPerMonth: { limit: 10, period: "month" },
     ttsPerMonth: { limit: 10, period: "month" },
@@ -57,6 +65,7 @@ export const LIMITS_BY_PLAN: Record<EffectivePlan, PlanLimits> = {
   FREE: {
     curricula: { limit: 5, period: "lifetime" },
     continuityCurricula: { limit: 2, period: "lifetime" },
+    sandboxes: { limit: 1, period: "lifetime" },
     lessonsPerMonth: { limit: 30, period: "month" },
     discussionsPerMonth: { limit: 10, period: "month" },
     ttsPerMonth: { limit: 10, period: "month" },
@@ -64,6 +73,7 @@ export const LIMITS_BY_PLAN: Record<EffectivePlan, PlanLimits> = {
   EXPLORER: {
     curricula: { limit: 10, period: "month" },
     continuityCurricula: { limit: 5, period: "month" },
+    sandboxes: { limit: 10, period: "month" },
     lessonsPerMonth: { limit: 100, period: "month" },
     discussionsPerMonth: { limit: 30, period: "month" },
     ttsPerMonth: { limit: 50, period: "month" },
@@ -71,6 +81,7 @@ export const LIMITS_BY_PLAN: Record<EffectivePlan, PlanLimits> = {
   SCHOLAR: {
     curricula: { limit: null, period: "month" },
     continuityCurricula: { limit: 20, period: "month" },
+    sandboxes: { limit: null, period: "month" },
     lessonsPerMonth: { limit: null, period: "month" },
     discussionsPerMonth: { limit: null, period: "month" },
     ttsPerMonth: { limit: null, period: "month" },
@@ -95,6 +106,8 @@ export type PlanUsageSnapshot = {
   curricula: UsageRow;
   /** Multi-source (Continuity) curriculum usage — separate counter. */
   continuityCurricula: UsageRow;
+  /** Knowledge Sandbox usage — separate counter. */
+  sandboxes: UsageRow;
   lessonsThisMonth: UsageRow;
   discussionsThisMonth: UsageRow;
   ttsThisMonth: UsageRow;
@@ -127,15 +140,33 @@ export function resolveEffectivePlan(input: {
 
 // Single-source (kind=SINGLE) curriculum lifetime count. The kind filter
 // ensures continuity curricula don't double-count against the single bucket.
+// `sandboxId: null` excludes the hidden curricula that back Knowledge
+// Sandboxes — those are never standalone curricula and must not consume a
+// curriculum slot.
 export async function countCurriculaForUser(userId: string): Promise<number> {
-  return prisma.curriculum.count({ where: { userId, kind: "SINGLE" } });
+  return prisma.curriculum.count({
+    where: { userId, kind: "SINGLE", sandboxId: null },
+  });
 }
 
 // Single-source curricula created this calendar month.
 export async function countCurriculaThisMonth(userId: string): Promise<number> {
   const since = startOfThisMonthUTC();
   return prisma.curriculum.count({
-    where: { userId, kind: "SINGLE", createdAt: { gte: since } },
+    where: { userId, kind: "SINGLE", sandboxId: null, createdAt: { gte: since } },
+  });
+}
+
+// Knowledge Sandbox lifetime count (FREE / ALPHA).
+export async function countSandboxesForUser(userId: string): Promise<number> {
+  return prisma.sandbox.count({ where: { userId } });
+}
+
+// Knowledge Sandboxes created this calendar month (EXPLORER).
+export async function countSandboxesThisMonth(userId: string): Promise<number> {
+  const since = startOfThisMonthUTC();
+  return prisma.sandbox.count({
+    where: { userId, createdAt: { gte: since } },
   });
 }
 
@@ -247,6 +278,12 @@ export async function getPlanUsage(
   "lifetime"
     ? countContinuityCurriculaForUser(userId)
     : countContinuityCurriculaThisMonth(userId));
+  // Sandbox count — skip the query for SCHOLAR (unlimited).
+  const sandboxCount = await (limits.sandboxes.limit === null
+    ? Promise.resolve(0)
+    : limits.sandboxes.period === "lifetime"
+      ? countSandboxesForUser(userId)
+      : countSandboxesThisMonth(userId));
   const [lessons, discussions, tts] = await Promise.all([
     limits.lessonsPerMonth.limit === null
       ? Promise.resolve(0)
@@ -269,6 +306,7 @@ export async function getPlanUsage(
     isAlpha: user?.isAlpha ?? false,
     curricula: buildRow(curriculaCount, limits.curricula),
     continuityCurricula: buildRow(continuityCount, limits.continuityCurricula),
+    sandboxes: buildRow(sandboxCount, limits.sandboxes),
     lessonsThisMonth: buildRow(lessons, limits.lessonsPerMonth),
     discussionsThisMonth: buildRow(discussions, limits.discussionsPerMonth),
     ttsThisMonth: buildRow(tts, limits.ttsPerMonth),
@@ -282,6 +320,7 @@ export type LimitCheckArgs = {
   feature:
     | "curricula"
     | "continuityCurricula"
+    | "sandboxes"
     | "lessonsThisMonth"
     | "discussionsThisMonth"
     | "ttsThisMonth";
@@ -296,11 +335,13 @@ export function isOverLimit(args: LimitCheckArgs): boolean {
       ? limits.curricula
       : args.feature === "continuityCurricula"
         ? limits.continuityCurricula
-        : args.feature === "lessonsThisMonth"
-          ? limits.lessonsPerMonth
-          : args.feature === "discussionsThisMonth"
-            ? limits.discussionsPerMonth
-            : limits.ttsPerMonth;
+        : args.feature === "sandboxes"
+          ? limits.sandboxes
+          : args.feature === "lessonsThisMonth"
+            ? limits.lessonsPerMonth
+            : args.feature === "discussionsThisMonth"
+              ? limits.discussionsPerMonth
+              : limits.ttsPerMonth;
   if (cap.limit === null) return false;
   return args.used >= cap.limit;
 }

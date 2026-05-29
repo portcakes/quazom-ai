@@ -8,6 +8,10 @@ import {
 import { requireAuth } from "@/lib/auth-utils";
 import { getCurrentUser } from "@/lib/queries/user";
 import { getUserCourses, getUserCurriculaCount } from "@/lib/queries/courses";
+import {
+  getUserSandboxSummaries,
+  getUserSandboxesCount,
+} from "@/lib/queries/sandbox";
 import { getUserContinuityNotes } from "@/lib/queries/continuity-notes";
 import { CourseListProvider } from "../course-list/course-list-provider";
 import { ContinuityNoteProvider } from "../continuity-notes/continuity-note-provider";
@@ -18,10 +22,19 @@ import { ThemeSync } from "@/components/shared/theme-sync";
 
 export default async function NavWrapper({ children }: { children: React.ReactNode }) {
     await requireAuth();
-    const [user, courses, totalCount, continuityNotes] = await Promise.all([
+    const [
+        user,
+        courses,
+        curriculaCount,
+        sandboxes,
+        sandboxCount,
+        continuityNotes,
+    ] = await Promise.all([
         getCurrentUser(),
         getUserCourses(),
         getUserCurriculaCount(),
+        getUserSandboxSummaries(),
+        getUserSandboxesCount(),
         getUserContinuityNotes(),
     ]);
 
@@ -47,7 +60,8 @@ export default async function NavWrapper({ children }: { children: React.ReactNo
         <CourseListProvider
             userId={user.id}
             initialCourses={courses}
-            initialTotalCount={totalCount}
+            initialSandboxes={sandboxes}
+            initialTotalCount={curriculaCount + sandboxCount}
         >
             <ContinuityNoteProvider initialNotes={initialContinuityNotes}>
                 <AudioPlayerProvider>

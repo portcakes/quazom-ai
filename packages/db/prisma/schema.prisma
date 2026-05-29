@@ -89,6 +89,7 @@ model User {
   continuityNotes      ContinuityNote[]
   generatedAudios      GeneratedAudio[]
   audioPlaylist        AudioPlaylistItem[]
+  sandboxes            Sandbox[]
 
   @@unique([email])
   @@map("user")
@@ -200,6 +201,14 @@ model Curriculum {
   // Optional short failure reason shown on the detail page when status is
   // FAILED. Kept off the index so the index stays cheap.
   statusMessage         String?
+  // When set, this curriculum is the hidden backing container for a
+  // Knowledge Sandbox — it hosts the sandbox's generated Materials as
+  // Lesson rows so the entire lesson pipeline (generator, viewer, monthly
+  // lesson cap) is reused unchanged. Backing curricula are always
+  // `isHidden` and are filtered out of every curricula list/count via this
+  // column so they never surface as standalone curricula.
+  sandboxId             String?              @unique
+  sandbox               Sandbox?             @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
   // Optional user-supplied (or AI-generated from continuity notes) thesis
   // statement injected at the top of the curriculum prompt for continuity
   // curricula. NULL for single-source curricula.
@@ -347,6 +356,10 @@ model Lesson {
   // is the AI's suggestion list.
   resourceLinks        ResourceLesson[]
   generatedAudios      GeneratedAudio[]
+  // Present only on lessons that back a Knowledge Sandbox Material. Lets the
+  // sandbox's Materials tab join back to the generated lesson's title +
+  // status, and lets the lesson generator look up which sources to cite.
+  sandboxMaterial      SandboxMaterial?
   // Sessions reference lessons indirectly through StudySession.lessonIds (Json),
   // not a relational FK, so we don't list them here.
 
@@ -724,6 +737,10 @@ model Resource {
   // an input. SetNull on the source side means deleting this resource leaves
   // the curriculum's sources list intact with a tombstone entry.
   curriculumSources CurriculumSource[]
+  // Same idea for Knowledge Sandboxes — a resource attached as a sandbox
+  // source. SetNull keeps the sandbox source row as a tombstone if the
+  // resource is later deleted.
+  sandboxSources    SandboxSource[]
 
   @@index([userId])
   @@index([userId, kind])
@@ -956,6 +973,9 @@ enum AiUsageKind {
   CURRICULUM_THESIS
   LESSON
   DISCUSSION_REPLY
+  // Multi-turn AI chat inside a Knowledge Sandbox Research Session. Tracked
+  // for cost visibility only — research chat has no hard per-plan cap.
+  RESEARCH_REPLY
   SUBMISSION_FEEDBACK
   NOTE_SUMMARY
   TTS
@@ -1074,4 +1094,135 @@ model AudioPlaylistItem {
   @@unique([userId, audioId])
   @@index([userId, position])
   @@map("audio_playlist_item")
+}
+
+// ===========================================================================
+// Knowledge Sandboxes
+//
+// A Sandbox is a research workspace that lives next to Curricula under the
+// shared "Studies" umbrella. It collects Sources (mirroring CurriculumSource),
+// hosts multi-turn AI Research Sessions, and can generate Materials —
+// readings / quizzes / projects that cite the user's sources. Materials are
+// real Lesson rows under a hidden backing Curriculum (see Sandbox.id ↔
+// Curriculum.sandboxId) so the existing lesson generator, viewer, and monthly
+// lesson cap are all reused unchanged.
+// ===========================================================================
+model Sandbox {
+  id          String   @id
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  // Optional short description shown on the Overview tab + collection cards.
+  description String   @default("")
+  // Optional thesis statement anchoring the workspace. Mirrors the
+  // continuity-curriculum thesis concept.
+  thesis      String?
+  // Hidden from the sidebar (and the Studies sandbox section) when true, but
+  // still owned by the user — mirrors Curriculum.isHidden.
+  isHidden    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  // The hidden backing curriculum that hosts this sandbox's generated
+  // Materials. 1:1 — the FK + unique constraint live on the Curriculum side
+  // (Curriculum.sandboxId). Deleting the sandbox cascades to the backing
+  // curriculum (and therefore its modules + lessons).
+  backingCurriculum Curriculum?
+  sources           SandboxSource[]
+  researchSessions  ResearchSession[]
+  materials         SandboxMaterial[]
+
+  @@index([userId])
+  @@map("sandbox")
+}
+
+// What kind of input a SandboxSource row represents. TOPIC / QUESTION /
+// THESIS are free-text (`text` column); LINK_RESOURCE / FILE_RESOURCE point
+// at an owned Resource; CONTINUITY_NOTE references a continuity note id.
+enum SandboxSourceKind {
+  TOPIC
+  LINK_RESOURCE
+  FILE_RESOURCE
+  CONTINUITY_NOTE
+  THESIS
+  QUESTION
+}
+
+// One source ingredient inside a Sandbox. Research Sessions and Material
+// generation select a subset of these by id to scope the AI to specific
+// sources.
+model SandboxSource {
+  id               String            @id
+  sandboxId        String
+  sandbox          Sandbox           @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
+  kind             SandboxSourceKind
+  // Stable display order as the user arranged sources.
+  order            Int               @default(0)
+  // Short label shown in source pickers / cards (e.g. resource title, the
+  // topic text, or a truncated question/thesis).
+  label            String            @default("")
+  // TOPIC / QUESTION / THESIS rows: the free-text body the user typed.
+  text             String?
+  // LINK_RESOURCE / FILE_RESOURCE rows: the owned Resource. SetNull on
+  // delete leaves a tombstone source row the UI can still render.
+  resourceId       String?
+  resource         Resource?         @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  // CONTINUITY_NOTE rows: the note id (not a FK so a deleted note leaves a
+  // provenance trail).
+  continuityNoteId String?
+  createdAt        DateTime          @default(now())
+
+  @@index([sandboxId])
+  @@index([resourceId])
+  @@map("sandbox_source")
+}
+
+// A multi-turn AI chat scoped to one or more of a sandbox's sources. Unlike
+// lesson discussions, research sessions have no turn cap and no per-plan
+// quota — they're tracked only via AiUsage (kind = RESEARCH_REPLY).
+model ResearchSession {
+  id          String   @id
+  sandboxId   String
+  sandbox     Sandbox  @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
+  // User-supplied (or defaulted) session label shown on the Research tab card.
+  title       String   @default("Research Session")
+  // SandboxSource ids this session is scoped to (Json array of strings).
+  sourceIds   Json     @default("[]")
+  // Array of { role: 'assistant' | 'user', content: string, createdAt: ISO }.
+  chatHistory Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sandboxId])
+  @@map("research_session")
+}
+
+// Which lesson activity type a generated Material maps to. A subset of the
+// full LessonActivityType set — sandboxes only generate readings, quizzes,
+// and projects.
+enum SandboxMaterialKind {
+  READING
+  QUIZ
+  PROJECT
+}
+
+// Links a Sandbox to a generated Material. The Material itself is a real
+// Lesson row (under the sandbox's backing curriculum/module); this join row
+// records which sources the material was asked to cite and what kind it is so
+// the Materials tab can render cards without re-deriving from the lesson.
+model SandboxMaterial {
+  id        String              @id
+  sandboxId String
+  sandbox   Sandbox             @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
+  // The backing Lesson row. 1:1 — deleting the lesson (e.g. via the backing
+  // curriculum cascade) removes this row too.
+  lessonId  String              @unique
+  lesson    Lesson              @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  kind      SandboxMaterialKind
+  // SandboxSource ids the material was asked to synthesise + cite (Json
+  // array of strings). Read by the lesson generator to inject source text.
+  sourceIds Json                @default("[]")
+  createdAt DateTime            @default(now())
+
+  @@index([sandboxId])
+  @@map("sandbox_material")
 }

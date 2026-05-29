@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { userChannel } from "@/inngest/channels";
 import { useTRPCClient } from "@/trpc/client";
 import type { CourseSummary } from "@/lib/queries/courses";
+import type { SandboxSidebarSummary } from "@/lib/queries/sandbox";
 
 export type PendingCourse = {
   tempId: string;
@@ -19,10 +20,13 @@ type CourseListContextValue = {
    * session client-side. */
   userId: string;
   courses: CourseSummary[];
+  /** Visible Knowledge Sandboxes, rendered alongside curricula. */
+  sandboxes: SandboxSidebarSummary[];
   pending: PendingCourse[];
   /**
-   * Total number of curricula owned by the user, including hidden ones.
-   * Used to decide whether to show the "See all Curricula" sidebar link.
+   * Total number of "studies" (curricula + sandboxes) owned by the user,
+   * including hidden ones. Used to decide whether to show the "See all
+   * Studies" sidebar link.
    */
   totalCount: number;
   addPending: (entry: PendingCourse) => void;
@@ -45,6 +49,7 @@ const REALTIME_TOPICS = [
 type Props = {
   userId: string;
   initialCourses: CourseSummary[];
+  initialSandboxes: SandboxSidebarSummary[];
   initialTotalCount: number;
   children: React.ReactNode;
 };
@@ -52,6 +57,7 @@ type Props = {
 export function CourseListProvider({
   userId,
   initialCourses,
+  initialSandboxes,
   initialTotalCount,
   children,
 }: Props) {
@@ -163,12 +169,21 @@ export function CourseListProvider({
     () => ({
       userId,
       courses: initialCourses,
+      sandboxes: initialSandboxes,
       pending,
       totalCount: initialTotalCount,
       addPending,
       removePending,
     }),
-    [userId, initialCourses, initialTotalCount, pending, addPending, removePending],
+    [
+      userId,
+      initialCourses,
+      initialSandboxes,
+      initialTotalCount,
+      pending,
+      addPending,
+      removePending,
+    ],
   );
 
   return <CourseListContext.Provider value={value}>{children}</CourseListContext.Provider>;

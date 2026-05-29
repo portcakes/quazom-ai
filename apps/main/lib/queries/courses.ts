@@ -41,7 +41,9 @@ export async function getUserCourses(): Promise<CourseSummary[]> {
   if (!session) return [];
 
   const curricula = await prisma.curriculum.findMany({
-    where: { userId: session.user.id, isHidden: false },
+    // `sandboxId: null` excludes the hidden curricula that back Knowledge
+    // Sandboxes — those are never shown as standalone curricula.
+    where: { userId: session.user.id, isHidden: false, sandboxId: null },
     select: { id: true, title: true, kind: true, status: true },
     orderBy: { createdAt: "desc" },
   });
@@ -63,7 +65,7 @@ export async function getUserCurriculaCount(): Promise<number> {
   if (!session) return 0;
 
   return await prisma.curriculum.count({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, sandboxId: null },
   });
 }
 
@@ -76,7 +78,7 @@ export async function getUserCurricula(): Promise<CurriculumCardSummary[]> {
   if (!session) return [];
 
   const curricula = await prisma.curriculum.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, sandboxId: null },
     select: {
       id: true,
       title: true,

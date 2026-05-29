@@ -198,9 +198,47 @@ Discussion lessons are skippable. The chat box has a Skip button next to Send th
 
 ---
 
+## Knowledge Sandboxes (formerly Research Mode) [SHIPPED - May 28, 2026]
+
+Dedicated workspaces for deep research and long-form study, sitting alongside Curricula under the shared **Studies** umbrella.
+
+A Sandbox is created from the **New Studies** modal (formerly "New Curriculum"), which now has a Curriculum / Sandbox toggle. To open a Sandbox a user gives it a title and, optionally, attaches sources:
+- uploaded PDF / TXT / Markdown files
+- links to websites, academic journals, dissertations, course catalogs, or syllabi (run through the same reader-mode extractor + social-domain guardrails as curricula)
+- free-text topics
+- a working thesis statement
+- research questions (one per line)
+- their own Continuity Notes
+- highlighting text and passages from lessons, resources, and notes (Later)
+
+Each Sandbox is organised into five tabs:
+- **Overview** — at-a-glance counts, the working thesis, and a primer on the workspace.
+- **Sources** — every link, file, topic, note, thesis, and question anchoring the workspace.
+- **Research** — **Research Sessions**: multi-turn AI chats grounded in a chosen subset of sources. The AI cites sources inline by label. Research chat is **unmetered** (no per-message or per-month cap); token usage is still recorded as `RESEARCH_REPLY` for admin/cost visibility.
+- **Materials** — generate **readings, quizzes, and projects** that synthesise and cite the selected sources. Each Material is a real Lesson (backed by a hidden per-sandbox curriculum), so it opens in the existing lesson viewer and counts toward the monthly lesson cap.
+- **Options** — hide the sandbox from the sidebar, or delete it.
+
+Sandboxes appear as cards in the sidebar next to curricula, on a dedicated **Sandbox Showcase** (`/sandboxes`), and on the unified **Study Sessions** page (`/studies`, reached via the sidebar's "See all Studies" link) that lists curricula and sandboxes together.
+
+Sandbox creation counts against a separate per-plan quota:
+- FREE / ALPHA: 1 lifetime
+- Explorer: 10 per month
+- Scholar: unlimited
+
+Materials generated inside a sandbox count toward the existing monthly lesson cap for each tier.
+
+Sandbox User Flow of Thought:
+Sources → Questions → Research → Writing → Analysis → Discovery
+
+Still planned for Sandboxes:
+- highlight-to-source capture from lessons, resources, and notes
+- submitting the user's own writing for AI review and feedback
+- side-by-side source comparison that surfaces biases and contradictions
+- a knowledge map of sources and the connections between them
+
+---
+
 # Upcoming Features
-
-
 
 ## Gamification
 
@@ -225,20 +263,6 @@ Quazom may eventually generate evolving maps of interconnected knowledge based o
 - notes written
 - resources studied
 - concepts explored
-
----
-
-## Research Mode
-
-A dedicated workflow for deep research and long-form study.
-
-Potential features include:
-- literature review assistance
-- thesis development
-- AI-assisted synthesis
-- source comparison
-- quote organization
-- argument mapping
 
 ---
 

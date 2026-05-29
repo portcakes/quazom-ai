@@ -4,6 +4,7 @@ import {
   CalendarDaysIcon,
   CoinsIcon,
   FileTextIcon,
+  FlaskConicalIcon,
   HighlighterIcon,
   KeyRoundIcon,
   LogInIcon,
@@ -109,8 +110,15 @@ export default async function AdminOverviewPage({ searchParams }: PageProps) {
           icon={SparklesIcon}
         />
         <StatCard
+          label="Sandboxes created"
+          value={overview.sandboxesCreated}
+          hint={`${overview.totalSandboxes.toLocaleString()} all-time`}
+          icon={FlaskConicalIcon}
+        />
+        <StatCard
           label="Lessons generated"
           value={overview.lessonsGenerated}
+          hint="includes sandbox materials"
           icon={BookOpenTextIcon}
         />
         <StatCard
