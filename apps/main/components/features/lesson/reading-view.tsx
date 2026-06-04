@@ -11,6 +11,7 @@ import { AnnotatedMarkdown } from "@/components/features/notes/annotated-markdow
 import { SpeakTextButton } from "@/components/shared/speak-text-button";
 import { Highlightable } from "./highlightable";
 import { LessonNotesPanel } from "./lesson-notes-panel";
+import { useSyncScheduleProgress } from "./use-sync-schedule-progress";
 
 type Props = {
   lesson: LessonDetail;
@@ -20,9 +21,13 @@ export function ReadingView({ lesson }: Props) {
   const reading = lesson.reading;
   const router = useRouter();
   const trpc = useTRPC();
+  const syncScheduleProgress = useSyncScheduleProgress();
   const markComplete = useMutation(
     trpc.markReadingComplete.mutationOptions({
-      onSuccess: () => router.refresh(),
+      onSuccess: () => {
+        syncScheduleProgress();
+        router.refresh();
+      },
     }),
   );
   const annotationsQuery = useQuery(

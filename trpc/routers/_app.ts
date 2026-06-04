@@ -90,6 +90,7 @@ import {
   type StudyTimeSlot as StudyTimeSlotConst,
 } from '@/lib/schedule/time-slots';
 import { computeStreak } from '@/lib/schedule/streak';
+import { onLessonCompletionChanged } from '@/lib/schedule/session-completion';
 import type { StudyTimeSlot as PrismaStudyTimeSlot } from '@quazom-ai/db/enums';
 
 // Shared note input — title and description are optional, content is required,
@@ -1587,6 +1588,12 @@ export const appRouter = createTRPCRouter({
         },
       });
 
+      await onLessonCompletionChanged({
+        userId: ctx.userId,
+        lessonId: quiz.lesson.id,
+        completed: true,
+      });
+
       await inngest.send({
         name: 'app/submission.grade',
         data: {
@@ -1633,6 +1640,12 @@ export const appRouter = createTRPCRouter({
           isCompleted: true,
           feedback: null as unknown as object,
         },
+      });
+
+      await onLessonCompletionChanged({
+        userId: ctx.userId,
+        lessonId: exercise.lesson.id,
+        completed: true,
       });
 
       await inngest.send({
@@ -1878,7 +1891,10 @@ export const appRouter = createTRPCRouter({
         select: {
           id: true,
           lesson: {
-            select: { module: { select: { curriculum: { select: { userId: true } } } } },
+            select: {
+              id: true,
+              module: { select: { curriculum: { select: { userId: true } } } },
+            },
           },
         },
       });
@@ -1888,6 +1904,11 @@ export const appRouter = createTRPCRouter({
       await prisma.project.update({
         where: { id: project.id },
         data: { submissionUrl: input.submissionUrl, isCompleted: true },
+      });
+      await onLessonCompletionChanged({
+        userId: ctx.userId,
+        lessonId: project.lesson.id,
+        completed: true,
       });
       return { ok: true };
     }),
@@ -1899,7 +1920,10 @@ export const appRouter = createTRPCRouter({
         select: {
           id: true,
           lesson: {
-            select: { module: { select: { curriculum: { select: { userId: true } } } } },
+            select: {
+              id: true,
+              module: { select: { curriculum: { select: { userId: true } } } },
+            },
           },
         },
       });
@@ -1909,6 +1933,11 @@ export const appRouter = createTRPCRouter({
       await prisma.video.update({
         where: { id: video.id },
         data: { isCompleted: input.isCompleted },
+      });
+      await onLessonCompletionChanged({
+        userId: ctx.userId,
+        lessonId: video.lesson.id,
+        completed: input.isCompleted,
       });
       return { ok: true };
     }),
@@ -1920,7 +1949,10 @@ export const appRouter = createTRPCRouter({
         select: {
           id: true,
           lesson: {
-            select: { module: { select: { curriculum: { select: { userId: true } } } } },
+            select: {
+              id: true,
+              module: { select: { curriculum: { select: { userId: true } } } },
+            },
           },
         },
       });
@@ -1930,6 +1962,11 @@ export const appRouter = createTRPCRouter({
       await prisma.readings.update({
         where: { id: reading.id },
         data: { isCompleted: input.isCompleted },
+      });
+      await onLessonCompletionChanged({
+        userId: ctx.userId,
+        lessonId: reading.lesson.id,
+        completed: input.isCompleted,
       });
       return { ok: true };
     }),
@@ -2015,6 +2052,7 @@ export const appRouter = createTRPCRouter({
           isCompleted: true,
           lesson: {
             select: {
+              id: true,
               module: { select: { curriculum: { select: { userId: true } } } },
             },
           },
@@ -2031,6 +2069,11 @@ export const appRouter = createTRPCRouter({
       await prisma.discussion.update({
         where: { id: discussion.id },
         data: { isCompleted: true, wasSkipped: true },
+      });
+      await onLessonCompletionChanged({
+        userId: ctx.userId,
+        lessonId: discussion.lesson.id,
+        completed: true,
       });
       return { ok: true, alreadyComplete: false };
     }),
@@ -3795,7 +3838,9 @@ export const appRouter = createTRPCRouter({
     const today = startOfDayInTimezone(new Date(), user?.timezone ?? 'UTC');
 
     // Idempotent: upsert keyed on the user+date unique constraint so a
-    // double-click doesn't error out.
+    // double-click doesn't error out. Checking in only records attendance for
+    // the day — study sessions are marked done when the learner actually
+    // completes the lessons in them, not here.
     await prisma.checkIn.upsert({
       where: { userId_date: { userId: ctx.userId, date: today } },
       create: {
@@ -3804,13 +3849,6 @@ export const appRouter = createTRPCRouter({
         date: today,
       },
       update: {},
-    });
-
-    // Mark every session scheduled for today as completed too — the user is
-    // checking in for the day, after all.
-    await prisma.studySession.updateMany({
-      where: { userId: ctx.userId, date: today },
-      data: { isCompleted: true },
     });
 
     return { ok: true };

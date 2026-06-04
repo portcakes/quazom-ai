@@ -13,6 +13,7 @@ import { useTRPC } from "@/trpc/client";
 import type { LessonDetail } from "@/lib/queries/lesson";
 import { Highlightable } from "./highlightable";
 import { LessonNotesPanel } from "./lesson-notes-panel";
+import { useSyncScheduleProgress } from "./use-sync-schedule-progress";
 
 type Props = {
   lesson: LessonDetail;
@@ -22,12 +23,14 @@ export function ProjectView({ lesson }: Props) {
   const project = lesson.project;
   const router = useRouter();
   const trpc = useTRPC();
+  const syncScheduleProgress = useSyncScheduleProgress();
   const [url, setUrl] = useState(project?.submissionUrl ?? "");
 
   const submit = useMutation(
     trpc.submitProjectUrl.mutationOptions({
       onSuccess: () => {
         toast.success("Project submission saved");
+        syncScheduleProgress();
         router.refresh();
       },
       onError: (err) => toast.error(err.message ?? "Failed to submit"),

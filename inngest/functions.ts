@@ -23,6 +23,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateObject, generateText } from "ai";
 import prisma from "@quazom-ai/db";
 import { recordAiUsage } from "./ai-usage";
+import { onLessonCompletionChanged } from "@/lib/schedule/session-completion";
 
 const google = createGoogleGenerativeAI();
 const MODEL = "gemini-2.5-flash-lite";
@@ -1661,6 +1662,14 @@ ${turnInstruction}`,
         },
       });
     });
+
+    // The final AI turn completes the discussion (and therefore the lesson),
+    // so mark its study session(s) done and check the learner in for the day.
+    if (isFinalReply) {
+      await step.run("sync-session-completion", () =>
+        onLessonCompletionChanged({ userId, lessonId, completed: true }),
+      );
+    }
 
     await step.realtime.publish(
       "publish-discussion-ready",

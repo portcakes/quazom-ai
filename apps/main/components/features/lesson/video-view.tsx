@@ -11,6 +11,7 @@ import { Markdown } from "@/components/shared/markdown";
 import { SpeakTextButton } from "@/components/shared/speak-text-button";
 import { Highlightable } from "./highlightable";
 import { LessonNotesPanel } from "./lesson-notes-panel";
+import { useSyncScheduleProgress } from "./use-sync-schedule-progress";
 
 type Props = {
   lesson: LessonDetail;
@@ -20,9 +21,13 @@ export function VideoView({ lesson }: Props) {
   const video = lesson.video;
   const router = useRouter();
   const trpc = useTRPC();
+  const syncScheduleProgress = useSyncScheduleProgress();
   const markComplete = useMutation(
     trpc.markVideoComplete.mutationOptions({
-      onSuccess: () => router.refresh(),
+      onSuccess: () => {
+        syncScheduleProgress();
+        router.refresh();
+      },
     }),
   );
 

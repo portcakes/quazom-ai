@@ -17,6 +17,7 @@ import { useTRPC, useTRPCClient } from "@/trpc/client";
 import { userChannel } from "@/inngest/channels";
 import type { LessonDetail, LessonChatMessage } from "@/lib/queries/lesson";
 import { Highlightable } from "./highlightable";
+import { useSyncScheduleProgress } from "./use-sync-schedule-progress";
 
 type Props = {
   lesson: LessonDetail;
@@ -34,6 +35,7 @@ export function DiscussionView({ lesson, userId }: Props) {
   const trpc = useTRPC();
   const trpcClient = useTRPCClient();
   const discussion = lesson.discussion;
+  const syncScheduleProgress = useSyncScheduleProgress();
   const [draft, setDraft] = useState("");
   const [waitingForReply, setWaitingForReply] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -58,6 +60,7 @@ export function DiscussionView({ lesson, userId }: Props) {
     trpc.skipDiscussion.mutationOptions({
       onSuccess: () => {
         toast.success("Discussion skipped");
+        syncScheduleProgress();
         router.refresh();
       },
       onError: (err) => toast.error(err.message ?? "Failed to skip discussion"),
@@ -96,8 +99,16 @@ export function DiscussionView({ lesson, userId }: Props) {
     // exception to the set-state-in-effect rule.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setWaitingForReply(false);
+    // The final AI turn completes the discussion server-side (marking the
+    // study session done + checking the user in), so refresh schedule state.
+    syncScheduleProgress();
     router.refresh();
-  }, [messages.byTopic.discussionMessageReady, lesson.id, router]);
+  }, [
+    messages.byTopic.discussionMessageReady,
+    lesson.id,
+    router,
+    syncScheduleProgress,
+  ]);
 
   // Autoscroll the chat to bottom on new messages.
   useEffect(() => {
